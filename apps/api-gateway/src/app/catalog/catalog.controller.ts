@@ -10,6 +10,7 @@ import {
   MerchandisingPatterns,
   RequestContext,
   SearchProductsDto,
+  SearchSuggestDto,
 } from '@ecommerce/contracts';
 import { GatewayService } from '../common/gateway.service';
 
@@ -79,6 +80,13 @@ export class CatalogController {
   @ApiOperation({ summary: 'Brands' })
   brands(@Query('q') q?: string) {
     return this.gateway.catalog(CatalogPatterns.LIST_BRANDS, { q });
+  }
+
+  @Public()
+  @Get('search/suggest')
+  @ApiOperation({ summary: 'Search-box type-ahead: matching categories and products for a partial term' })
+  suggest(@Query() query: SearchSuggestDto) {
+    return this.gateway.catalog(CatalogPatterns.SEARCH_SUGGEST, { q: query.q });
   }
 
   @Public()

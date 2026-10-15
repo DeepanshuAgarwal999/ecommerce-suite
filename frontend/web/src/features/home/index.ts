@@ -2,6 +2,7 @@ export * from './api/home-api';
 export * from './cms-types';
 export * from './components/category-chips';
 export * from './components/category-tiles';
+export * from './components/explore-categories';
 export * from './components/hero-carousel';
 export * from './components/home-section-grid';
 export * from './components/product-rail';

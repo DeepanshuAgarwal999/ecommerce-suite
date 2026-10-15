@@ -235,6 +235,63 @@
   background-attachment: fixed;
 }
 
+/* Diwali: soft out-of-focus lamp glows drifting behind the page. */
+:root[data-occasion='diwali']:not(.dark) body {
+  background-image:
+    radial-gradient(18rem 18rem at 6% 18%, oklch(0.85 0.14 75 / 0.16), transparent 70%),
+    radial-gradient(14rem 14rem at 94% 26%, oklch(0.8 0.15 60 / 0.14), transparent 70%),
+    radial-gradient(22rem 22rem at 88% 78%, oklch(0.85 0.14 75 / 0.12), transparent 70%),
+    radial-gradient(16rem 16rem at 12% 82%, oklch(0.78 0.16 45 / 0.1), transparent 70%);
+  background-attachment: fixed;
+}
+
+/* Occasion artwork motion: flickering diya flames, a breathing halo, a slow
+ * sway for hanging lamps and twinkling sparkles. Small amplitudes on purpose -
+ * ambience, not a distraction from the products. */
+@keyframes diya-flicker {
+  0%, 100% { transform: scale(1, 1) rotate(0deg); }
+  25% { transform: scale(0.94, 1.06) rotate(-2deg); }
+  50% { transform: scale(1.04, 0.96) rotate(1.5deg); }
+  75% { transform: scale(0.97, 1.04) rotate(-1deg); }
+}
+@keyframes diya-glow {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+@keyframes diya-swing {
+  from { transform: rotate(-2.2deg); }
+  to { transform: rotate(2.2deg); }
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.15; transform: scale(0.6) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1) rotate(45deg); }
+}
+.diya-flame {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: diya-flicker 1.6s ease-in-out infinite;
+}
+.diya-glow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: diya-glow 2.6s ease-in-out infinite;
+}
+.diya-swing {
+  transform-origin: 50% 0;
+  animation: diya-swing 4.5s ease-in-out infinite alternate;
+}
+.twinkle {
+  animation: twinkle 2.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .diya-flame,
+  .diya-glow,
+  .diya-swing,
+  .twinkle {
+    animation: none;
+  }
+}
+
 @theme inline {
   --font-display: var(--font-lora), Georgia, serif;
   --color-festive: var(--festive);
@@ -348,8 +405,30 @@
   }
 }
 
+/* Horizontal category / product rails — the Blinkit and Meesho staple.
+ * Declared with @utility (not a plain class in @layer utilities) so Tailwind
+ * orders it with the core utilities: responsive overrides such as
+ * `md:grid md:grid-cols-6` then reliably win on desktop. As a plain class it
+ * out-ranked them, every "rail on phone, grid on desktop" row stayed a flex
+ * row, and items sized to their labels - uneven tiles. */
+@utility rail {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  & > * {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+  }
+}
+
 @layer utilities {
-  /* Horizontal category / product rails — the Blinkit and Meesho staple. */
+  /* Hide the scrollbar on any custom horizontal scroller. */
   .scrollbar-none {
     scrollbar-width: none;
     -ms-overflow-style: none;
@@ -358,12 +437,6 @@
     display: none;
   }
 
-  .rail {
-    @apply scrollbar-none flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain;
-  }
-  .rail > * {
-    @apply snap-start shrink-0;
-  }
 
   /* Deep festive panel with a scatter of gold flecks - the backdrop of Vaaree's
    * arch tiles. Two offset dot grids read as random sparkle at a glance. */

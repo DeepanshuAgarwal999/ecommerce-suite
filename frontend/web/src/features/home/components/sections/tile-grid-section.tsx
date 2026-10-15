@@ -10,7 +10,7 @@ type TileShape = 'square' | 'circle' | 'arch';
  * Image tiles linking anywhere - "Shop by occasion", "Top categories", or
  * Vaaree's festive arches. Shape comes from `config.tileShape`; `arch` frames
  * each tile in a gold-trimmed jharokha over the festive surface (the clip path
- * is defined once in the root layout - see ArchClipDefs).
+ * is defined once in the root layout - see FestiveSvgDefs).
  */
 export function TileGridSection({ section }: { section: CmsHomeSection }) {
   if (section.tiles.length === 0) return null;
@@ -23,12 +23,14 @@ export function TileGridSection({ section }: { section: CmsHomeSection }) {
     >
       <ul
         className={cn(
-          'rail -mx-4 px-4 md:mx-0 md:grid md:gap-4 md:px-0',
-          shape === 'arch' ? 'md:grid-cols-8' : 'md:grid-cols-6',
+          'rail -mx-4 px-4 md:mx-0 md:grid md:gap-x-4 md:gap-y-6 md:overflow-visible md:px-0',
+          shape === 'arch'
+            ? 'md:grid-cols-[repeat(auto-fit,minmax(140px,1fr))]'
+            : 'md:grid-cols-[repeat(auto-fit,minmax(130px,1fr))]',
         )}
       >
         {section.tiles.map((tile) => (
-          <li key={tile.id} className={cn('shrink-0 md:w-auto', shape === 'arch' ? 'w-[124px]' : 'w-[104px]')}>
+          <li key={tile.id} className={cn('md:w-auto', shape === 'arch' ? 'w-[124px]' : 'w-[104px]')}>
             <Tile tile={tile} shape={shape} />
           </li>
         ))}
@@ -52,23 +54,24 @@ function Tile({ tile, shape }: { tile: CmsSectionTile; shape: TileShape }) {
     <Link href={tile.linkUrl} className="group flex flex-col items-center gap-2">
       {shape === 'arch' ? (
         // Gold outer arch with the inner arch inset by 3px reads as a gilt frame.
-        <span className="clip-arch bg-festive-gold block aspect-[4/5] w-full p-[3px] transition-transform group-hover:-translate-y-0.5">
+        <span className="clip-arch bg-festive-gold block aspect-[4/5] w-full p-[3px] transition-transform group-hover:-translate-y-0.5 md:max-w-[200px]">
           <span className="clip-arch festive-surface relative block size-full overflow-hidden">{image}</span>
         </span>
       ) : (
         <span
           className={cn(
-            'bg-secondary relative aspect-square w-full overflow-hidden transition-shadow group-hover:shadow-[0_8px_24px_oklch(0.42_0.21_330/0.12)]',
+            'bg-secondary relative aspect-square w-full overflow-hidden transition-shadow md:max-w-[168px] group-hover:shadow-[0_8px_24px_oklch(0.42_0.21_330/0.12)]',
             shape === 'circle' ? 'rounded-full' : 'rounded-2xl',
           )}
         >
           {image}
         </span>
       )}
+      {/* Fixed two-line slot keeps every tile's image on the same baseline. */}
       <span
         className={cn(
-          'text-center font-bold',
-          shape === 'arch' ? 'text-[13px] leading-tight md:text-base' : 'text-xs md:text-sm',
+          'line-clamp-2 min-h-[2lh] text-center leading-tight font-bold',
+          shape === 'arch' ? 'text-[13px] md:text-base' : 'text-xs md:text-sm',
         )}
       >
         {tile.title}

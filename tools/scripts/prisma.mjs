@@ -127,6 +127,27 @@ for (const service of services) {
   if (result.status !== 0) {
     failed++;
     console.error(`[prisma] ${service}: FAILED (exit ${result.status})`);
+    continue;
+  }
+
+  // Database objects Prisma's schema language can't express - triggers, functions
+  // (e.g. catalog-service's full-text search vector) - live as idempotent SQL in
+  // prisma/sql/ and are re-applied after every `db push` so they never drift from
+  // the schema that `db push` just synced.
+  const sqlDir = join(appsDir, service, 'prisma', 'sql');
+  if (argv[0] === 'db' && argv[1] === 'push' && existsSync(sqlDir)) {
+    for (const file of readdirSync(sqlDir).filter((name) => name.endsWith('.sql')).sort()) {
+      console.log(`[prisma] ${service}: applying prisma/sql/${file}`);
+      const applied = spawnSync(
+        'npx',
+        ['prisma', 'db', 'execute', `--file=${join(sqlDir, file)}`, `--schema=${schema}`],
+        { cwd: root, env: childEnv, stdio: 'inherit', shell: process.platform === 'win32' },
+      );
+      if (applied.status !== 0) {
+        failed++;
+        console.error(`[prisma] ${service}: prisma/sql/${file} FAILED (exit ${applied.status})`);
+      }
+    }
   }
 }
 

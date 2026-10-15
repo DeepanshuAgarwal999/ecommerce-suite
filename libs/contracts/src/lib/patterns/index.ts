@@ -55,6 +55,8 @@ export const CatalogPatterns = {
   LIST_BRANDS: 'catalog.list-brands',
   CREATE_BRAND: 'catalog.create-brand',
   SEARCH_PRODUCTS: 'catalog.search-products',
+  /** Type-ahead for the storefront search box: a few categories + products per keystroke. */
+  SEARCH_SUGGEST: 'catalog.search-suggest',
   GET_PRODUCT: 'catalog.get-product',
   GET_VARIANTS: 'catalog.get-variants',
   CREATE_PRODUCT: 'catalog.create-product',

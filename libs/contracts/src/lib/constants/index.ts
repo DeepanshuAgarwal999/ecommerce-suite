@@ -36,6 +36,7 @@ export const CacheKeys = {
   homeSections: () => `catalog:home:sections`,
   footer: () => `catalog:footer`,
   activeTheme: () => `catalog:home:theme`,
+  searchSuggest: (term: string) => `catalog:suggest:${term}`,
   variantPricing: (variantId: string) => `catalog:variant:${variantId}`,
   availability: (sku: string) => `inventory:availability:${sku}`,
   cart: (userId: string) => `cart:${userId}`,
@@ -60,6 +61,8 @@ export const CacheTtl = {
   CATEGORY_TREE: 3600,
   /** Home page CMS content - changes a few times a week, read on every visit. */
   HOME_CONTENT: 300,
+  /** Type-ahead results: short, since it is per-term and the catalogue keeps moving. */
+  SEARCH_SUGGEST: 60,
   AVAILABILITY: 15,
   CART: 60 * 60 * 24 * 30,
   IDEMPOTENCY: 60 * 60 * 24,

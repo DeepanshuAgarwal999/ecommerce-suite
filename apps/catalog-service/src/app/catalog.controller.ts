@@ -66,6 +66,11 @@ export class CatalogController {
 
   // --- products ------------------------------------------------------------
 
+  @MessagePattern(CatalogPatterns.SEARCH_SUGGEST)
+  suggest(@Payload() msg: { q: string }) {
+    return this.products.suggest(msg.q ?? '');
+  }
+
   @MessagePattern(CatalogPatterns.SEARCH_PRODUCTS)
   search(@Payload() msg: SearchProductsDto) {
     return this.products.search(msg);

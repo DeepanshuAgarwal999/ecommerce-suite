@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Bricolage_Grotesque, Lora, Manrope } from 'next/font/google';
 import { env } from '@/config/env';
 import { siteConfig } from '@/config/site';
-import { ArchClipDefs, getActiveTheme, OccasionStyle, presetMeta } from '@/features/theme';
+import { FestiveSvgDefs, getActiveTheme, OccasionStyle, presetMeta } from '@/features/theme';
 import { cn } from '@/lib/utils';
 import { AppProviders } from '@/providers';
 import './global.css';
@@ -73,7 +73,7 @@ export default async function RootLayout({
         <OccasionStyle theme={theme} />
       </head>
       <body className="min-h-dvh">
-        <ArchClipDefs />
+        <FestiveSvgDefs />
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

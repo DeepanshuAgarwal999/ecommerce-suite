@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Heart, LogIn, Trash2 } from 'lucide-react';
@@ -12,25 +13,34 @@ import { formatPrice } from '@/lib/utils/format';
 import { useToggleWishlist, useWishlist } from '../hooks/use-wishlist';
 import type { WishlistItem } from '../types';
 
-export function WishlistView() {
+interface WishlistViewProps {
+  /** Shown under the signed-out / empty states - server-rendered category shortcuts. */
+  emptyExtra?: ReactNode;
+}
+
+export function WishlistView({ emptyExtra }: WishlistViewProps) {
   const isSignedIn = useIsSignedIn();
   const openLogin = useOpenLogin();
 
   if (!isSignedIn) {
     return (
-      <EmptyState
-        icon={LogIn}
-        title="Sign in to see your wishlist"
-        description="Items you save show up here, from any device."
-        action={<Button onClick={openLogin}>Sign in</Button>}
-      />
+      <>
+        <EmptyState
+          icon={LogIn}
+          title="Sign in to see your wishlist"
+          description="Items you save show up here, from any device."
+          action={<Button onClick={openLogin}>Sign in</Button>}
+          className="pb-10"
+        />
+        {emptyExtra}
+      </>
     );
   }
 
-  return <SignedInWishlist />;
+  return <SignedInWishlist emptyExtra={emptyExtra} />;
 }
 
-function SignedInWishlist() {
+function SignedInWishlist({ emptyExtra }: WishlistViewProps) {
   const { data, isPending, isError, refetch } = useWishlist();
 
   if (isPending) {
@@ -60,16 +70,20 @@ function SignedInWishlist() {
 
   if (data.items.length === 0) {
     return (
-      <EmptyState
-        icon={Heart}
-        title="Your wishlist is empty"
-        description="Tap the heart on anything you like the look of — it'll show up here."
-        action={
-          <Button asChild>
-            <Link href="/">Start browsing</Link>
-          </Button>
-        }
-      />
+      <>
+        <EmptyState
+          icon={Heart}
+          title="Your wishlist is empty"
+          description="Tap the heart on anything you like the look of — it'll show up here."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/">Go to home page</Link>
+            </Button>
+          }
+          className="pb-10"
+        />
+        {emptyExtra}
+      </>
     );
   }
 

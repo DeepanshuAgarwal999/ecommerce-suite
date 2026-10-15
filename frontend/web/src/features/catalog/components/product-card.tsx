@@ -11,13 +11,21 @@ import type { Product } from '../types';
 interface ProductCardProps {
   product: Product;
   className?: string;
+  /** How wide the card's image actually renders at each breakpoint - callers
+   *  in a fixed-width rail (ProductRail) must override the grid default below,
+   *  or Next requests an image sized for a much wider slot than it displays. */
+  sizes?: string;
 }
 
 /**
  * Server component by design — only the wishlist heart and the add-to-cart
  * control are interactive, so a grid of 40 tiles ships almost no JavaScript.
  */
-export function ProductCard({ product, className }: ProductCardProps) {
+export function ProductCard({
+  product,
+  className,
+  sizes = '(min-width: 1280px) 20vw, (min-width: 640px) 33vw, 50vw',
+}: ProductCardProps) {
   const off = discountPercent(product.mrpPaise, product.pricePaise);
   const variant =
     product.variantLabel ??
@@ -39,7 +47,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
               src={product.images[0].url}
               alt={product.images[0].alt || product.name}
               fill
-              sizes="(min-width: 1280px) 20vw, (min-width: 640px) 33vw, 50vw"
+              sizes={sizes}
               className="object-cover transition-transform duration-300 group-hover:scale-[1.04]"
             />
           ) : null}

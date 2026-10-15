@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { LazySection } from '@/components/common';
 import {
   CategoryTiles,
   CategoryTilesSkeleton,
@@ -13,6 +14,7 @@ import {
   toHeroSlide,
   usps,
 } from '@/features/home';
+import { OccasionStrip } from '@/features/theme';
 
 /**
  * Banners are the LCP element - above the fold - so they stay in the blocking
@@ -41,36 +43,47 @@ export default async function HomePage() {
 
   return (
     <>
+      {/* "Happy Diwali" greeting with hanging diyas - renders only while an
+          occasion theme with banner artwork is live. */}
+      <OccasionStrip />
       <HeroCarousel slides={slides} />
       <UspStrip usps={usps} />
 
-      <Suspense fallback={<CategoryTilesSkeleton />}>
-        <CategoryTiles />
-      </Suspense>
+      <LazySection minHeight={220}>
+        <Suspense fallback={<CategoryTilesSkeleton />}>
+          <CategoryTiles />
+        </Suspense>
+      </LazySection>
 
-      <Suspense fallback={<ProductRailSkeleton />}>
-        <ProductRail
-          title="Bestsellers"
-          subtitle="What everyone is adding this week"
-          href="/c/bestsellers"
-          query={{ sort: 'rating' }}
-        />
-      </Suspense>
+      <LazySection minHeight={420}>
+        <Suspense fallback={<ProductRailSkeleton />}>
+          <ProductRail
+            title="Bestsellers"
+            subtitle="What everyone is adding this week"
+            href="/c/bestsellers"
+            query={{ sort: 'rating' }}
+          />
+        </Suspense>
+      </LazySection>
 
       {/* Admin-curated shelves - "Shop by occasion", "Trending rooms" and
           anything else configured in the console - in the order set there. */}
-      <Suspense fallback={<HomeSectionsSkeleton />}>
-        <HomeSections />
-      </Suspense>
+      <LazySection minHeight={320}>
+        <Suspense fallback={<HomeSectionsSkeleton />}>
+          <HomeSections />
+        </Suspense>
+      </LazySection>
 
-      <Suspense fallback={<ProductRailSkeleton />}>
-        <ProductRail
-          title="New arrivals"
-          subtitle="Fresh from the makers"
-          href="/c/new"
-          query={{ sort: 'newest' }}
-        />
-      </Suspense>
+      <LazySection minHeight={420}>
+        <Suspense fallback={<ProductRailSkeleton />}>
+          <ProductRail
+            title="New arrivals"
+            subtitle="Fresh from the makers"
+            href="/c/new"
+            query={{ sort: 'newest' }}
+          />
+        </Suspense>
+      </LazySection>
     </>
   );
 }

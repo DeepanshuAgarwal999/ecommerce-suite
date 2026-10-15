@@ -260,6 +260,15 @@ export class ReviewProductDto {
   reason?: string;
 }
 
+/** Type-ahead query. Short by design - this runs on every keystroke. */
+export class SearchSuggestDto {
+  @ApiProperty({ example: 'cush' })
+  @IsString()
+  @MaxLength(60)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  q!: string;
+}
+
 export class SearchProductsDto {
   @ApiPropertyOptional()
   @IsString()

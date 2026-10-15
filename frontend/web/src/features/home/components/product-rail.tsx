@@ -37,7 +37,9 @@ export async function ProductRail({ title, subtitle, href, query }: ProductRailP
       <ul className="rail -mx-4 px-4 md:mx-0 md:px-0">
         {products.map((product) => (
           <li key={product.id} className="w-[180px] md:w-[224px]">
-            <ProductCard product={product} className="h-full" />
+            {/* Fixed rail width, not a grid fraction of the viewport - overriding
+                the card's grid-tuned default keeps the requested image small. */}
+            <ProductCard product={product} className="h-full" sizes="(min-width: 768px) 224px, 180px" />
           </li>
         ))}
       </ul>

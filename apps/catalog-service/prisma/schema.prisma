@@ -11,13 +11,16 @@
 // inventory writes. Stock lives in inventory-service, keyed by SKU.
 
 generator client {
-  provider = "prisma-client-js"
-  output   = "../../../node_modules/@ecom-db/catalog"
+  provider        = "prisma-client-js"
+  output          = "../../../node_modules/@ecom-db/catalog"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  /// pg_trgm: trigram indexes behind typo-tolerant and partial-word search.
+  extensions = [pg_trgm]
 }
 
 enum ProductStatus {
@@ -72,6 +75,8 @@ model Category {
   @@index([parentId, displayOrder])
   @@index([path])
   @@index([isActive, isFeatured])
+  /// Trigram index for the search-box category suggestions.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "categories_name_trgm_idx")
   @@map("categories")
 }
 
@@ -146,6 +151,9 @@ model Product {
   /// a JSONB blob beats an EAV table here.
   specifications Json?
   searchKeywords String[]
+  /// Weighted full-text vector (title A, keywords B, vendor C, description D).
+  /// Maintained by a trigger in prisma/sql/search.sql - never written by app code.
+  searchVector   Unsupported("tsvector")?
 
   isReturnable   Boolean @default(true)
   returnWindowDays Int   @default(7)
@@ -167,6 +175,10 @@ model Product {
   @@index([status, soldCount])
   @@index([categoryId, status, ratingAverage])
   @@index([externalSource])
+  /// Full-text search (see prisma/sql/search.sql and ProductService.matchIds).
+  @@index([searchVector], type: Gin)
+  /// Trigram index: makes ILIKE '%term%' and word_similarity typo matching index scans.
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_title_trgm_idx")
   @@map("products")
 }
 

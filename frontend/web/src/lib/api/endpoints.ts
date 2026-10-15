@@ -21,9 +21,11 @@ export const endpoints = {
     sections: '/catalog/home/sections',
     theme: '/catalog/home/theme',
   },
+  footer: '/catalog/footer',
   search: {
     query: '/search',
-    suggestions: '/search/suggestions',
+    /** Type-ahead: matching categories + products for a partial term. */
+    suggest: '/catalog/search/suggest',
   },
   cart: {
     current: '/cart',

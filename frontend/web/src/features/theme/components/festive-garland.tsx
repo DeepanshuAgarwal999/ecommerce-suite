@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import type { GarlandMotif } from '../presets';
+import { Diya } from './diya';
 
 /**
  * The toran strip hung under the site header while an occasion theme is live -
@@ -44,27 +45,15 @@ function MarigoldStrand({ x, y, n }: { x: number; y: number; n: number }) {
   );
 }
 
-function Diya({ x, y }: { x: number; y: number }) {
-  return (
-    <g>
-      <line x1={x} y1={y - 8} x2={x} y2={y} strokeWidth={1} style={{ stroke: 'var(--festive-gold)' }} />
-      <path d={`M${x - 7} ${y + 4} Q${x} ${y + 12} ${x + 7} ${y + 4} Z`} style={{ fill: 'var(--festive-gold)' }} />
-      <path
-        d={`M${x} ${y - 5} q3 4.5 0 8 q-3 -3.5 0 -8 z`}
-        transform={`translate(0 ${2})`}
-        style={{ fill: 'oklch(0.78 0.18 60)' }}
-      />
-    </g>
-  );
-}
-
 const motifs: Record<Exclude<GarlandMotif, 'none'>, ReactNode> = {
   marigold: (
     <>
       <Swag />
       <MarigoldStrand x={6} y={6} n={3} />
       <MarigoldStrand x={W - 6} y={6} n={3} />
-      <Diya x={W / 2} y={18} />
+      <line x1={W / 2} y1={9.5} x2={W / 2} y2={14} strokeWidth={0.8} style={{ stroke: 'var(--festive-gold)' }} />
+      {/* 60x48 diya scaled to ~0.42 and hung from the swag's lowest point. */}
+      <Diya transform={`translate(${W / 2 - 12.6} 11) scale(0.42)`} />
     </>
   ),
   gulal: (
@@ -155,22 +144,5 @@ export function FestiveGarland({ motif, className }: { motif: GarlandMotif; clas
         <rect width="100%" height={H} fill={`url(#${id})`} />
       </svg>
     </div>
-  );
-}
-
-/**
- * The jharokha (Mughal window) outline Vaaree frames its festive tiles in,
- * defined once per page and referenced by `clip-path: url(#arch-clip)`.
- * objectBoundingBox units make it scale to any tile size.
- */
-export function ArchClipDefs() {
-  return (
-    <svg width="0" height="0" aria-hidden className="absolute">
-      <defs>
-        <clipPath id="arch-clip" clipPathUnits="objectBoundingBox">
-          <path d="M0 1 L0 0.27 C0 0.16 0.1 0.12 0.24 0.11 C0.37 0.1 0.45 0.07 0.5 0 C0.55 0.07 0.63 0.1 0.76 0.11 C0.9 0.12 1 0.16 1 0.27 L1 1 Z" />
-        </clipPath>
-      </defs>
-    </svg>
   );
 }

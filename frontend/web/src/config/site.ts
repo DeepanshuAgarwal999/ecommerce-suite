@@ -6,14 +6,19 @@ export const siteConfig = {
     'Shop bedding, decor, kitchen, bath and furnishings with free delivery over ₹999 and 7-day returns.',
   defaultLocale: 'en-IN',
   currency: 'INR',
-  /** Rotating hint inside the search box, one per render. */
+  /** Words the search box placeholder cycles through: "Search for <hint>". */
   searchHints: [
     'cushion covers',
     'linen bedsheets',
     'ceramic planters',
     'table runners',
     'bath mats',
+    'wall clocks',
+    'dinner sets',
+    'string lights',
   ],
+  /** Chips shown in the empty search dropdown. Swap for analytics-driven terms later. */
+  trendingSearches: ['Diwali decor', 'Bedsheets', 'Cushion covers', 'Table lamps', 'Dinner sets', 'Planters'],
   support: {
     email: 'support@example.com',
     phone: '+911234567890',

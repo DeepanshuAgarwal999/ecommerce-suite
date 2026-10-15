@@ -25,8 +25,10 @@ export async function ProductTabsSection({ section }: { section: CmsHomeSection 
       title: tile.title,
       imageUrl: tile.imageUrl,
       linkUrl: tile.linkUrl,
+      // Centred columns of up to 13rem, so a tab with 4 products sits under the
+      // centred pills instead of hugging the left edge.
       panel: (
-        <ul className="rail -mx-4 px-4 md:mx-0 md:grid md:grid-cols-6 md:px-0">
+        <ul className="rail -mx-4 px-4 md:mx-0 md:grid md:grid-flow-col md:auto-cols-[minmax(0,13rem)] md:justify-center md:gap-4 md:overflow-visible md:px-0">
           {products.map((product) => (
             <li key={product.id} className="w-[170px] md:w-auto">
               <ProductCard product={product} className="h-full" />
