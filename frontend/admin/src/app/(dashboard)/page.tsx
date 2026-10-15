@@ -8,6 +8,7 @@ import { OrderTrendChart } from '@/features/dashboard/components/order-trend-cha
 import { StatusBreakdownChart } from '@/features/dashboard/components/status-breakdown-chart';
 import { KpiCard } from '@/features/dashboard/components/kpi-card';
 import { useDashboardOverview, useOrderTrend } from '@/features/dashboard/hooks/use-dashboard';
+import { InsightsHighlights } from '@/features/insights/components/insights-highlights';
 
 export default function DashboardPage() {
   const { data: overview, isLoading: overviewLoading } = useDashboardOverview();
@@ -88,6 +89,8 @@ export default function DashboardPage() {
           isLoading={overviewLoading}
         />
       </div>
+
+      <InsightsHighlights />
     </>
   );
 }

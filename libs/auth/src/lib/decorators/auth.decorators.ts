@@ -1,4 +1,4 @@
-import { ExecutionContext, SetMetadata, createParamDecorator } from '@nestjs/common';
+import { ExecutionContext, SetMetadata, applyDecorators, createParamDecorator } from '@nestjs/common';
 import { AuthenticatedUser, Permission, Role } from '@ecommerce/contracts';
 import { IS_PUBLIC_KEY, Public } from '@ecommerce/common';
 import type { Request } from 'express';
@@ -8,6 +8,16 @@ import type { Request } from 'express';
 // doesn't live here. Kept re-exported so every existing `from '@ecommerce/auth'`
 // import of Public/IS_PUBLIC_KEY keeps working unchanged.
 export { IS_PUBLIC_KEY, Public };
+
+export const OPTIONAL_AUTH_KEY = 'optional_auth';
+
+/**
+ * Public route that still identifies the caller when they send a valid token:
+ * `@CurrentUser()` is the user if signed in, undefined otherwise, and a missing,
+ * expired or invalid token never rejects the request. For personalisation and
+ * analytics endpoints that work for everyone but do better for known shoppers.
+ */
+export const OptionalAuth = () => applyDecorators(Public(), SetMetadata(OPTIONAL_AUTH_KEY, true));
 
 export const ROLES_KEY = 'required_roles';
 export const PERMISSIONS_KEY = 'required_permissions';

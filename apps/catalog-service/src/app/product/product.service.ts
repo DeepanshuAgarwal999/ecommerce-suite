@@ -437,6 +437,47 @@ export class ProductService {
   }
 
   /**
+   * Storefront cards for recommendation results, in the order the ids were given
+   * (the recommender's ranking), ACTIVE products only - a product archived since the
+   * model last ran simply drops out instead of rendering a dead card.
+   */
+  async cards(productIds: string[]) {
+    const ids = [...new Set(productIds)].slice(0, 60);
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.product.findMany({
+      where: { id: { in: ids }, status: ProductStatus.ACTIVE },
+      select: { ...SEARCH_SELECT, category: { select: { slug: true } } },
+    });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return ids.map((id) => byId.get(id)).filter(Boolean);
+  }
+
+  /** Paged id/category/status for every product - recommendation-service's backfill. */
+  async index(pageRaw: number, limitRaw: number) {
+    const page = Math.max(1, pageRaw || 1);
+    const limit = Math.min(1000, Math.max(1, limitRaw || 500));
+    const items = await this.prisma.product.findMany({
+      orderBy: { id: 'asc' },
+      skip: (page - 1) * limit,
+      take: limit + 1,
+      select: { id: true, categoryId: true, status: true },
+    });
+    return { items: items.slice(0, limit), hasNext: items.length > limit };
+  }
+
+  /** Category chips for recommendation results, in the order given, active only. */
+  async categoryCards(categoryIds: string[]) {
+    const ids = [...new Set(categoryIds)].slice(0, 30);
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.category.findMany({
+      where: { id: { in: ids }, isActive: true },
+      select: { id: true, name: true, slug: true, imageUrl: true },
+    });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return ids.map((id) => byId.get(id)).filter(Boolean);
+  }
+
+  /**
    * Ranked ids of ACTIVE products matching a shopper's text, best first - the one
    * text-matching primitive behind both `search()` and `suggest()`.
    *

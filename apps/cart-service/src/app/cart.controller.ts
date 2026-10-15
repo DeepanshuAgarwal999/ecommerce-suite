@@ -70,6 +70,11 @@ export class CartController {
     );
   }
 
+  @MessagePattern(CartPatterns.ADMIN_TOP_WISHLISTED)
+  topWishlisted(@Payload() msg: { days: number }) {
+    return this.wishlist.topWishlisted(msg.days);
+  }
+
   @MessagePattern(CartPatterns.GET_WISHLIST)
   getWishlist(@Payload() msg: { userId: string; page?: number; limit?: number }) {
     return this.wishlist.list(msg.userId, msg);

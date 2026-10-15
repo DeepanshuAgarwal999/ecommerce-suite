@@ -4,6 +4,8 @@ export const Headers = {
   REQUEST_ID: 'x-request-id',
   IDEMPOTENCY_KEY: 'idempotency-key',
   DEVICE_ID: 'x-device-id',
+  /** Anonymous storefront visitor id (localStorage) - keys recommendations before sign-in. */
+  VISITOR_ID: 'x-visitor-id',
   APP_VERSION: 'x-app-version',
   /** Coarse platform hint: android | ios | web. Prefer X-Client for source. */
   PLATFORM: 'x-platform',
@@ -37,6 +39,16 @@ export const CacheKeys = {
   footer: () => `catalog:footer`,
   activeTheme: () => `catalog:home:theme`,
   searchSuggest: (term: string) => `catalog:suggest:${term}`,
+  /** Per-day engagement leaderboards (Redis sorted sets) - `day` is YYYY-MM-DD (IST).
+   *  The `{stats}` hash tag pins every stats key to one Redis Cluster slot, so a
+   *  multi-day ZUNIONSTORE stays legal if Redis is ever clustered. */
+  statsViews: (day: string) => `{stats}:views:${day}`,
+  statsSearches: (day: string) => `{stats}:searches:${day}`,
+  statsZeroSearches: (day: string) => `{stats}:searches0:${day}`,
+  /** Per-day totals as a hash: { views, searches, zeroSearches }. */
+  statsTotals: (day: string) => `{stats}:totals:${day}`,
+  statsScratch: (name: string) => `{stats}:tmp:${name}`,
+  adminInsights: (kind: 'engagement' | 'orders' | 'wishlist', days: number) => `admin:insights:${kind}:${days}`,
   variantPricing: (variantId: string) => `catalog:variant:${variantId}`,
   availability: (sku: string) => `inventory:availability:${sku}`,
   cart: (userId: string) => `cart:${userId}`,
@@ -72,6 +84,10 @@ export const CacheTtl = {
    *  up within a refresh or two, long enough to absorb a burst of concurrent
    *  admin traffic without re-querying per request. */
   ADMIN_SUMMARY: 30,
+  /** How long per-day engagement counters live - longest insights range + headroom. */
+  STATS_RETENTION: 60 * 60 * 24 * 100,
+  /** Insights aggregates - a heavier read than the dashboard; a few minutes stale is fine. */
+  ADMIN_INSIGHTS: 120,
 } as const;
 
 export const Limits = {
@@ -98,6 +114,7 @@ export const ServiceNames = {
   ORDER: 'order-service',
   PAYMENT: 'payment-service',
   NOTIFICATION: 'notification-service',
+  RECOMMENDATION: 'recommendation-service',
 } as const;
 
 /**

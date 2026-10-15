@@ -94,6 +94,7 @@ export const ConsumerGroups = {
   USER_SYNC: 'user-service.sync',
   CART_SYNC: 'cart-service.sync',
   AUTH_ROLE_SYNC: 'auth-service.role-sync',
+  RECOMMENDATION_LEARN: 'recommendation-service.learn',
 } as const;
 
 /**

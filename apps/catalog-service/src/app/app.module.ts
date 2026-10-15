@@ -8,6 +8,8 @@ import { BrandService } from './brand/brand.service';
 import { CatalogController } from './catalog.controller';
 import { CategoryService } from './category/category.service';
 import { CatalogConsumer } from './consumers/catalog.consumer';
+import { AnalyticsController } from './analytics/analytics.controller';
+import { AnalyticsService } from './analytics/analytics.service';
 import { BannerService } from './merchandising/banner.service';
 import { FooterService } from './merchandising/footer.service';
 import { HomeSectionService } from './merchandising/home-section.service';
@@ -27,7 +29,7 @@ import { ReviewService } from './review/review.service';
     ScheduleModule.forRoot(),
     HealthModule,
   ],
-  controllers: [CatalogController, MerchandisingController],
+  controllers: [CatalogController, MerchandisingController, AnalyticsController],
   providers: [
     CategoryService,
     BrandService,
@@ -35,6 +37,7 @@ import { ReviewService } from './review/review.service';
     ReviewService,
     BannerService,
     ThemeService,
+    AnalyticsService,
     HomeSectionService,
     FooterService,
     CatalogConsumer,

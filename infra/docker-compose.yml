@@ -28,6 +28,7 @@ x-service-env: &service-env
   ORDER_SERVICE_HOST: order-service
   PAYMENT_SERVICE_HOST: payment-service
   NOTIFICATION_SERVICE_HOST: notification-service
+  RECOMMENDATION_SERVICE_HOST: recommendation-service
   AUTH_SERVICE_TCP_PORT: 4001
   USER_SERVICE_TCP_PORT: 4002
   CATALOG_SERVICE_TCP_PORT: 4003
@@ -36,6 +37,7 @@ x-service-env: &service-env
   ORDER_SERVICE_TCP_PORT: 4006
   PAYMENT_SERVICE_TCP_PORT: 4007
   NOTIFICATION_SERVICE_TCP_PORT: 4008
+  RECOMMENDATION_SERVICE_TCP_PORT: 4009
 
 x-service-defaults: &service-defaults
   restart: unless-stopped
@@ -302,6 +304,23 @@ services:
       FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:-}
       MSG91_AUTH_KEY: ${MSG91_AUTH_KEY:-}
       MSG91_TEMPLATE_ID: ${MSG91_TEMPLATE_ID:-}
+
+  # Learns from Kafka (orders, products) and gateway activity events. Off the
+  # request path: the gateway never waits on it for anything but a recs read,
+  # and those time out to an empty list.
+  recommendation-service:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      args: { APP: recommendation-service }
+    image: ecom/recommendation-service
+    environment:
+      <<: *service-env
+      SERVICE_NAME: recommendation-service
+      PORT: 3009
+      TCP_PORT: 4009
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ecom}:${POSTGRES_PASSWORD:-ecom}@postgres:5432/recommendation_db?schema=public
 
 volumes:
   postgres-data:

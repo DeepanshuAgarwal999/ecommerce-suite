@@ -9,3 +9,4 @@ export * from './notification.dto';
 export * from './inventory.dto';
 export * from './admin.dto';
 export * from './merchandising.dto';
+export * from './analytics.dto';

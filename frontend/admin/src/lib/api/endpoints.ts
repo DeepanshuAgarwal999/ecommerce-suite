@@ -50,6 +50,7 @@ export const endpoints = {
     sectionTile: (sectionId: string, tileId: string) =>
       `/admin/home-sections/${sectionId}/tiles/${tileId}`,
     reorderSectionTiles: (sectionId: string) => `/admin/home-sections/${sectionId}/tiles/reorder`,
+    insights: '/admin/insights',
     themes: '/admin/themes',
     theme: (id: string) => `/admin/themes/${id}`,
     footerColumns: '/admin/footer/columns',

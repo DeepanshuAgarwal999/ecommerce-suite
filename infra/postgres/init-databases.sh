@@ -8,7 +8,7 @@
 # PgBouncer pool.
 set -e
 
-DATABASES="auth_db user_db catalog_db inventory_db cart_db order_db payment_db notification_db"
+DATABASES="auth_db user_db catalog_db inventory_db cart_db order_db payment_db notification_db recommendation_db"
 
 for db in $DATABASES; do
   echo "[init] creating database $db"

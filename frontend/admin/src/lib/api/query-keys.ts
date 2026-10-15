@@ -47,6 +47,10 @@ export const queryKeys = {
     all: ['home-sections'] as const,
     list: () => [...queryKeys.homeSections.all, 'list'] as const,
   },
+  insights: {
+    all: ['insights'] as const,
+    range: (days: number) => [...queryKeys.insights.all, days] as const,
+  },
   themes: {
     all: ['themes'] as const,
     list: () => [...queryKeys.themes.all, 'list'] as const,

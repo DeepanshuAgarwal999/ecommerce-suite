@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation';
 import { catalogApi } from '@/features/catalog/api/catalog-api';
 import { isApiError } from '@/lib/api/errors';
 import { ProductDetail } from '@/features/catalog/components/product-detail';
+import { TrackProductView } from '@/features/analytics/components/track-product-view';
+import { ProductRecommendations } from '@/features/recommendations/components/product-recommendations';
 
 interface ProductPageProps {
   params: Promise<{ slug: string }>;
@@ -30,5 +32,12 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 export default async function ProductPage({ params }: ProductPageProps) {
   const { slug } = await params;
   const product = await loadProduct(slug);
-  return <ProductDetail product={product} />;
+  return (
+    <>
+      <ProductDetail product={product} />
+      {/* Personal, so fetched in the browser - the page itself stays cached and shared. */}
+      <ProductRecommendations product={product} />
+      <TrackProductView productId={product.id} />
+    </>
+  );
 }

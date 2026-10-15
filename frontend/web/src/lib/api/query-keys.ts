@@ -23,6 +23,12 @@ export const queryKeys = {
     suggestions: (term: string) =>
       [...queryKeys.search.all, 'suggestions', term] as const,
   },
+  recommendations: {
+    all: ['recommendations'] as const,
+    product: (productId: string) => [...queryKeys.recommendations.all, 'product', productId] as const,
+    cart: (productIds: string[]) => [...queryKeys.recommendations.all, 'cart', productIds] as const,
+    forYou: () => [...queryKeys.recommendations.all, 'for-you'] as const,
+  },
   cart: {
     all: ['cart'] as const,
     current: () => [...queryKeys.cart.all, 'current'] as const,

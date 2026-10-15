@@ -450,6 +450,90 @@ export class OrderService {
   }
 
   /**
+   * Best sellers over the trailing `days` days: units, distinct orders and revenue
+   * per product, from order lines whose order actually went through - drafts,
+   * unpaid, failed-payment and cancelled orders are excluded, so a basket someone
+   * abandoned at payment never counts as a sale.
+   *
+   * `productIds` additionally returns the same stats for specific products (the
+   * Insights page asks for the most-viewed ones to compute view -> order
+   * conversion), whether or not they made the top list.
+   *
+   * One grouped query each, against the existing `orders(createdAt)` index.
+   */
+  async topProducts(days: number, productIds: string[] = []) {
+    const ids = [...new Set(productIds)].slice(0, 50).sort();
+    return this.cache.wrap(
+      `${CacheKeys.adminInsights('orders', days)}:${ids.join(',')}`,
+      async () => {
+        const counted = Prisma.sql`
+          o."createdAt" >= now() - make_interval(days => ${days}::int)
+          AND o."status" NOT IN ('DRAFT', 'PENDING_PAYMENT', 'PAYMENT_FAILED', 'CANCELLED')`;
+
+        type Row = {
+          productId: string;
+          title: string;
+          imageUrl: string | null;
+          units: bigint;
+          orders: bigint;
+          revenue: bigint;
+        };
+        const select = Prisma.sql`
+          SELECT oi."productId",
+                 max(oi."title") AS title,
+                 max(oi."imageUrl") AS "imageUrl",
+                 sum(oi."quantity")::bigint AS units,
+                 count(DISTINCT oi."orderId")::bigint AS orders,
+                 sum(oi."lineTotal")::bigint AS revenue
+          FROM "order_items" oi
+          JOIN "orders" o ON o."id" = oi."orderId"`;
+
+        const [top, forIds, totals] = await Promise.all([
+          this.prisma.$queryRaw<Row[]>`
+            ${select}
+            WHERE ${counted}
+            GROUP BY oi."productId"
+            ORDER BY units DESC, revenue DESC
+            LIMIT 20`,
+          ids.length
+            ? this.prisma.$queryRaw<Row[]>`
+                ${select}
+                WHERE ${counted} AND oi."productId" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
+                GROUP BY oi."productId"`
+            : Promise.resolve([] as Row[]),
+          this.prisma.$queryRaw<{ orders: bigint; units: bigint; revenue: bigint }[]>`
+            SELECT count(DISTINCT o."id")::bigint AS orders,
+                   coalesce(sum(oi."quantity"), 0)::bigint AS units,
+                   coalesce(sum(oi."lineTotal"), 0)::bigint AS revenue
+            FROM "orders" o
+            JOIN "order_items" oi ON oi."orderId" = o."id"
+            WHERE ${counted}`,
+        ]);
+
+        const toPlain = (row: Row) => ({
+          productId: row.productId,
+          title: row.title,
+          imageUrl: row.imageUrl,
+          units: Number(row.units),
+          orders: Number(row.orders),
+          revenue: Number(row.revenue),
+        });
+
+        return {
+          totals: {
+            orders: Number(totals[0]?.orders ?? 0),
+            units: Number(totals[0]?.units ?? 0),
+            revenue: Number(totals[0]?.revenue ?? 0),
+          },
+          top: top.map(toPlain),
+          byProduct: forIds.map(toPlain),
+        };
+      },
+      { ttlSeconds: CacheTtl.ADMIN_INSIGHTS },
+    );
+  }
+
+  /**
    * Moves an order to a new status.
    *
    * Every transition goes through `canTransition`, so an invalid jump is rejected the

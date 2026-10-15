@@ -55,6 +55,11 @@ export class OrderController {
     return this.orders.summary();
   }
 
+  @MessagePattern(OrderPatterns.ADMIN_TOP_PRODUCTS)
+  topProducts(@Payload() msg: { days: number; productIds?: string[] }) {
+    return this.orders.topProducts(msg.days, msg.productIds ?? []);
+  }
+
   @MessagePattern(OrderPatterns.ADMIN_ORDERS_TREND)
   trend(@Payload() msg: { days?: number }) {
     return this.orders.trend(msg.days ?? 14);

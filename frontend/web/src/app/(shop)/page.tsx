@@ -14,6 +14,7 @@ import {
   toHeroSlide,
   usps,
 } from '@/features/home';
+import { ForYou } from '@/features/recommendations/components/for-you';
 import { OccasionStrip } from '@/features/theme';
 
 /**
@@ -65,6 +66,10 @@ export default async function HomePage() {
           />
         </Suspense>
       </LazySection>
+
+      {/* Returning shoppers: recently viewed, favourite categories, picked for
+          them. Client-rendered so this page stays one cached HTML for everyone. */}
+      <ForYou />
 
       {/* Admin-curated shelves - "Shop by occasion", "Trending rooms" and
           anything else configured in the console - in the order set there. */}

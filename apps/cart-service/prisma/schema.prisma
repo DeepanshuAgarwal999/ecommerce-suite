@@ -111,6 +111,8 @@ model WishlistItem {
 
   @@unique([userId, productId, variantId])
   @@index([userId, createdAt])
+  /// Admin insights: "most wishlisted" groups by product.
+  @@index([productId, createdAt])
   @@map("wishlist_items")
 }
 

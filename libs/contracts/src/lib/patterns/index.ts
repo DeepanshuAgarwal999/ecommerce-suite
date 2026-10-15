@@ -57,6 +57,17 @@ export const CatalogPatterns = {
   SEARCH_PRODUCTS: 'catalog.search-products',
   /** Type-ahead for the storefront search box: a few categories + products per keystroke. */
   SEARCH_SUGGEST: 'catalog.search-suggest',
+  /** Storefront engagement events (see catalog-service AnalyticsService). */
+  TRACK_PRODUCT_VIEW: 'catalog.track-product-view',
+  TRACK_SEARCH: 'catalog.track-search',
+  /** Admin insights: top searches / zero-result searches / most-viewed over N days. */
+  ADMIN_ENGAGEMENT_INSIGHTS: 'catalog.admin-engagement-insights',
+  /** Storefront-ready cards for a list of product ids, in the order given (ACTIVE only). */
+  PRODUCT_CARDS: 'catalog.product-cards',
+  /** Name/slug/image for a list of category ids, in the order given. */
+  CATEGORY_CARDS: 'catalog.category-cards',
+  /** id + categoryId + status for every product, paged - recommendation-service backfill. */
+  PRODUCT_INDEX: 'catalog.product-index',
   GET_PRODUCT: 'catalog.get-product',
   GET_VARIANTS: 'catalog.get-variants',
   CREATE_PRODUCT: 'catalog.create-product',
@@ -142,6 +153,8 @@ export const CartPatterns = {
   TOGGLE_WISHLIST: 'cart.toggle-wishlist',
   /** Freezes the cart and returns a priced snapshot for order creation. */
   CHECKOUT_SNAPSHOT: 'cart.checkout-snapshot',
+  /** Admin insights: products saved to the most wishlists. */
+  ADMIN_TOP_WISHLISTED: 'cart.admin.top-wishlisted',
 } as const;
 
 export const OrderPatterns = {
@@ -160,6 +173,8 @@ export const OrderPatterns = {
   /** One grouped query for the dashboard's N-day trend line, instead of one
    *  `limit=1` filtered list call per day. */
   ADMIN_ORDERS_TREND: 'order.admin.trend',
+  /** Best sellers over N days (units, orders, revenue), plus the same stats for given product ids. */
+  ADMIN_TOP_PRODUCTS: 'order.admin.top-products',
   VENDOR_LIST_ORDERS: 'order.vendor.list',
   TRACK: 'order.track',
 } as const;
@@ -195,4 +210,21 @@ export const ServiceTokens = {
   ORDER: 'ORDER_SERVICE',
   PAYMENT: 'PAYMENT_SERVICE',
   NOTIFICATION: 'NOTIFICATION_SERVICE',
+  RECOMMENDATION: 'RECOMMENDATION_SERVICE',
+} as const;
+
+/**
+ * recommendation-service. Activity arrives as fire-and-forget events (`emit`, no
+ * reply awaited) so tracking can never slow a storefront request; reads are plain
+ * request/response, called by the gateway with a short timeout and a silent fallback.
+ */
+export const RecommendationPatterns = {
+  /** EventPattern: a shopper viewed / carted / wishlisted a product. */
+  ACTIVITY: 'recommendation.activity',
+  /** "Frequently bought together", "customers also viewed", similar - for one product. */
+  FOR_PRODUCT: 'recommendation.for-product',
+  /** "You might also need" for the products in a cart. */
+  FOR_CART: 'recommendation.for-cart',
+  /** Home page personalisation: recently viewed, favourite categories, picked for you. */
+  FOR_USER: 'recommendation.for-user',
 } as const;

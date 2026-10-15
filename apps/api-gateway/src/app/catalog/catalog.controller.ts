@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { CurrentUser, Public } from '@ecommerce/auth';
+import { CurrentUser, OptionalAuth, Public } from '@ecommerce/auth';
 import { Ctx, PaginationQueryDto } from '@ecommerce/common';
 import {
   AuthenticatedUser,
@@ -8,9 +8,12 @@ import {
   CreateReviewDto,
   InventoryPatterns,
   MerchandisingPatterns,
+  RecommendationPatterns,
   RequestContext,
   SearchProductsDto,
   SearchSuggestDto,
+  TrackProductViewDto,
+  TrackSearchDto,
 } from '@ecommerce/contracts';
 import { GatewayService } from '../common/gateway.service';
 
@@ -80,6 +83,34 @@ export class CatalogController {
   @ApiOperation({ summary: 'Brands' })
   brands(@Query('q') q?: string) {
     return this.gateway.catalog(CatalogPatterns.LIST_BRANDS, { q });
+  }
+
+  @OptionalAuth()
+  @Post('track/view')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: 'Storefront beacon: a product page was viewed (feeds admin Insights + recommendations)' })
+  trackView(
+    @Body() dto: TrackProductViewDto,
+    @CurrentUser('userId') userId: string | undefined,
+    @Headers('x-visitor-id') visitorId: string | undefined,
+  ) {
+    // One beacon, two consumers: the recommender learns from it fire-and-forget.
+    this.gateway.emitRecommendation(RecommendationPatterns.ACTIVITY, {
+      type: 'view',
+      productId: dto.productId,
+      userId: userId ?? null,
+      visitorId: visitorId ?? null,
+      at: new Date().toISOString(),
+    });
+    return this.gateway.catalog(CatalogPatterns.TRACK_PRODUCT_VIEW, dto);
+  }
+
+  @Public()
+  @Post('track/search')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: 'Storefront beacon: a search ran, with its result count (feeds admin Insights)' })
+  trackSearch(@Body() dto: TrackSearchDto) {
+    return this.gateway.catalog(CatalogPatterns.TRACK_SEARCH, dto);
   }
 
   @Public()

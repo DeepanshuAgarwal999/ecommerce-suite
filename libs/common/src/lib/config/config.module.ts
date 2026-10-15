@@ -13,6 +13,7 @@ const REQUIRED_BY_SERVICE: Record<string, string[]> = {
   'order-service': ['DATABASE_URL'],
   'payment-service': ['DATABASE_URL', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'],
   'notification-service': ['DATABASE_URL'],
+  'recommendation-service': ['DATABASE_URL'],
 };
 
 /**

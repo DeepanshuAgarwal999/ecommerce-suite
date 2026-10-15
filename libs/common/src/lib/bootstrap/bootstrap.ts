@@ -106,6 +106,7 @@ export async function bootstrap(
         Headers.CORRELATION_ID,
         Headers.IDEMPOTENCY_KEY,
         Headers.DEVICE_ID,
+        Headers.VISITOR_ID,
         Headers.APP_VERSION,
         Headers.PLATFORM,
         Headers.CLIENT,

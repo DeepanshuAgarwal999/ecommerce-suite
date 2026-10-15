@@ -6,6 +6,7 @@ import {
   notifyRefreshFailed,
   notifyRefreshed,
 } from './auth-bridge';
+import { getVisitorId } from '@/lib/visitor';
 import { ApiError } from './errors';
 
 type QueryValue = string | number | boolean | null | undefined;
@@ -123,6 +124,7 @@ export async function apiFetch<T>(
   const onServer = typeof window === 'undefined';
   const isPlainBody = body instanceof FormData || typeof body === 'string';
   const token = anonymous || onServer ? null : getAccessToken();
+  const visitorId = getVisitorId();
 
   const response = await fetch(buildUrl(path, searchParams), {
     ...init,
@@ -131,6 +133,8 @@ export async function apiFetch<T>(
     headers: {
       Accept: 'application/json',
       ...CLIENT_HEADERS,
+      // Personalisation key for signed-out shoppers (see lib/visitor).
+      ...(visitorId ? { 'x-visitor-id': visitorId } : {}),
       ...(body !== undefined && !isPlainBody
         ? { 'Content-Type': 'application/json' }
         : {}),

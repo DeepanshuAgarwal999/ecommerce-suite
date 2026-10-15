@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
-import { rpc } from '@ecommerce/common';
+import { rpc, rpcEmit } from '@ecommerce/common';
 import { ServiceTokens } from '@ecommerce/contracts';
 
 /**
@@ -25,6 +25,7 @@ export class GatewayService {
     @Inject(ServiceTokens.ORDER) private readonly orderClient: ClientProxy,
     @Inject(ServiceTokens.PAYMENT) private readonly paymentClient: ClientProxy,
     @Inject(ServiceTokens.NOTIFICATION) private readonly notificationClient: ClientProxy,
+    @Inject(ServiceTokens.RECOMMENDATION) private readonly recommendationClient: ClientProxy,
   ) {
     this.timeoutMs = config.get<number>('observability.rpcTimeoutMs', 10_000);
   }
@@ -76,5 +77,21 @@ export class GatewayService {
       timeoutMs: this.timeoutMs,
       service: 'notification-service',
     });
+  }
+
+  /**
+   * Recommendation reads get a deliberately short leash: they decorate a page, they
+   * never gate one. Callers catch and fall back to "nothing to show".
+   */
+  recommendation<T>(pattern: string, payload: unknown): Promise<T> {
+    return rpc<T>(this.recommendationClient, pattern, payload, {
+      timeoutMs: Math.min(this.timeoutMs, 1500),
+      service: 'recommendation-service',
+    });
+  }
+
+  /** Fire-and-forget event to recommendation-service - no reply, never blocks the request. */
+  emitRecommendation(pattern: string, payload: unknown): void {
+    rpcEmit(this.recommendationClient, pattern, payload);
   }
 }

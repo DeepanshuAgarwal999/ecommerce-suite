@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { TrackSearch } from '@/features/analytics/components/track-search';
 import { ProductFeed } from '@/features/catalog/components/product-feed';
 
 interface SearchPageProps {
@@ -26,7 +27,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         )}
       </h1>
       {term ? (
-        <ProductFeed query={{ search: term }} emptyTitle={`No matches for “${term}”`} />
+        <>
+          <ProductFeed query={{ search: term }} emptyTitle={`No matches for “${term}”`} />
+          <TrackSearch term={term} />
+        </>
       ) : (
         <p className="text-muted-foreground">Type in the search box above to find products.</p>
       )}

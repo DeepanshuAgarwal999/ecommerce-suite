@@ -9,6 +9,7 @@ import { useHydrated } from '@/lib/hooks/use-hydrated';
 import { useCartLines, useCartTotals } from '../hooks/use-cart';
 import { CartLineItem } from './cart-line-item';
 import { CartSummary } from './cart-summary';
+import { CartRecommendations } from '@/features/recommendations/components/cart-recommendations';
 
 interface CartViewProps {
   /** Shown under the empty state - the page passes server-rendered category shortcuts. */
@@ -43,13 +44,16 @@ export function CartView({ emptyExtra }: CartViewProps) {
   }
 
   return (
-    <div className="grid gap-8 md:grid-cols-[1fr_360px] md:items-start">
-      <ul className="flex flex-col gap-3">
-        {lines.map((line) => (
-          <CartLineItem key={line.productId} line={line} />
-        ))}
-      </ul>
-      <CartSummary totals={totals} />
-    </div>
+    <>
+      <div className="grid gap-8 md:grid-cols-[1fr_360px] md:items-start">
+        <ul className="flex flex-col gap-3">
+          {lines.map((line) => (
+            <CartLineItem key={line.productId} line={line} />
+          ))}
+        </ul>
+        <CartSummary totals={totals} />
+      </div>
+      <CartRecommendations productIds={lines.map((line) => line.productId)} />
+    </>
   );
 }

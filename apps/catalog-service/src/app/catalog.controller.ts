@@ -66,6 +66,21 @@ export class CatalogController {
 
   // --- products ------------------------------------------------------------
 
+  @MessagePattern(CatalogPatterns.PRODUCT_CARDS)
+  productCards(@Payload() msg: { productIds: string[] }) {
+    return this.products.cards(msg.productIds ?? []);
+  }
+
+  @MessagePattern(CatalogPatterns.CATEGORY_CARDS)
+  categoryCards(@Payload() msg: { categoryIds: string[] }) {
+    return this.products.categoryCards(msg.categoryIds ?? []);
+  }
+
+  @MessagePattern(CatalogPatterns.PRODUCT_INDEX)
+  productIndex(@Payload() msg: { page: number; limit: number }) {
+    return this.products.index(msg.page, msg.limit);
+  }
+
   @MessagePattern(CatalogPatterns.SEARCH_SUGGEST)
   suggest(@Payload() msg: { q: string }) {
     return this.products.suggest(msg.q ?? '');

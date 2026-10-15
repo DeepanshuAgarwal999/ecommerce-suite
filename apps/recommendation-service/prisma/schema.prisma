@@ -1,0 +1,181 @@
+// recommendation-service learns what shoppers view, cart, save and buy, and turns it
+// into "frequently bought together", "customers also viewed" and per-shopper
+// personalisation. It owns no business data - every row here can be rebuilt from the
+// event history, which is why it can be wiped and re-learned at any time.
+//
+// Data flow:
+//   events (Kafka orders/products, gateway activity) -> Interaction log + online
+//   counters (ItemStat, ItemPair, UserCategoryAffinity) -> periodic model build ->
+//   ItemNeighbor (materialised top-K per product) -> fast reads.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/@ecom-db/recommendation"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum InteractionKind {
+  VIEW
+  WISHLIST
+  CART
+  PURCHASE
+}
+
+/// Which co-occurrence a pair counts: seen in one browsing session, carted by one
+/// shopper within days, or bought by one shopper (same order or within 30 days).
+enum PairKind {
+  CO_VIEW
+  CO_CART
+  CO_PURCHASE
+}
+
+/// A materialised recommendation list per product.
+enum NeighborKind {
+  BOUGHT_TOGETHER
+  ALSO_VIEWED
+}
+
+/// Local copy of the catalogue facts the models need (category, live or not), kept in
+/// step by catalog Kafka events plus a periodic backfill. Display data (title, price,
+/// images, stock) is deliberately NOT here - the gateway fetches it live from catalog
+/// so a recommendation never shows a stale price.
+model ProductProjection {
+  id         String   @id @db.Uuid
+  categoryId String?  @db.Uuid
+  status     String   @db.VarChar(30)
+  updatedAt  DateTime @updatedAt
+
+  @@index([categoryId, status])
+  @@map("product_projection")
+}
+
+/// Append-only activity log - the source of truth every model can be rebuilt from.
+/// `userKey` is `u:<userId>` for signed-in shoppers, `v:<visitorId>` for anonymous ones
+/// (merged into the user key on sign-in - see IdentityService).
+model Interaction {
+  id         BigInt          @id @default(autoincrement())
+  userKey    String          @db.VarChar(80)
+  productId  String          @db.Uuid
+  categoryId String?         @db.Uuid
+  kind       InteractionKind
+  weight     Float
+  occurredAt DateTime        @default(now())
+
+  @@index([userKey, occurredAt])
+  @@index([productId, occurredAt])
+  @@index([occurredAt])
+  @@map("interactions")
+}
+
+/// Per-product counters, updated online. `popularity` is a time-decayed engagement
+/// score recomputed by the model build.
+model ItemStat {
+  productId  String   @id @db.Uuid
+  views      Int      @default(0)
+  carts      Int      @default(0)
+  wishlists  Int      @default(0)
+  purchases  Int      @default(0)
+  popularity Float    @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@index([popularity])
+  @@map("item_stats")
+}
+
+/// Co-occurrence counts, stored in both directions (A->B and B->A) so "neighbours of
+/// A" is one indexed range scan.
+model ItemPair {
+  kind      PairKind
+  productA  String   @db.Uuid
+  productB  String   @db.Uuid
+  count     Float    @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@id([kind, productA, productB])
+  @@map("item_pairs")
+}
+
+/// Category-level co-purchase - "people who buy an AC buy AC covers". Lets a brand-new
+/// product with no history of its own still get sensible complements.
+model CategoryPair {
+  categoryA String   @db.Uuid
+  categoryB String   @db.Uuid
+  count     Float    @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@id([categoryA, categoryB])
+  @@map("category_pairs")
+}
+
+/// Top-K neighbours per product, materialised by the model build. The read path is a
+/// single primary-key-prefix lookup.
+model ItemNeighbor {
+  productId  String       @db.Uuid
+  kind       NeighborKind
+  neighborId String       @db.Uuid
+  score      Float
+  rank       Int
+
+  @@id([productId, kind, neighborId])
+  @@index([productId, kind, rank])
+  @@map("item_neighbors")
+}
+
+/// How interested a shopper is in a category. Exponentially time-decayed: the stored
+/// score is as of `updatedAt` and is decayed on both write and read (half-life in
+/// AffinityService), so last month's binge fades and this week's interest leads.
+model UserCategoryAffinity {
+  userKey    String   @db.VarChar(80)
+  categoryId String   @db.Uuid
+  score      Float
+  updatedAt  DateTime
+
+  @@id([userKey, categoryId])
+  @@index([userKey, score])
+  @@map("user_category_affinity")
+}
+
+/// An anonymous visitor who later signed in - their pre-login history was merged
+/// into the user key once.
+model VisitorAlias {
+  visitorKey String   @id @db.VarChar(80)
+  userKey    String   @db.VarChar(80)
+  mergedAt   DateTime @default(now())
+
+  @@index([userKey])
+  @@map("visitor_aliases")
+}
+
+/// Impression fatigue: how often a product was recommended to a shopper without them
+/// engaging. Each unengaged showing discounts the product's rank for that shopper;
+/// after enough showings over enough days it is suppressed for a cool-off period, so
+/// recommendations refresh themselves instead of nagging. Any real engagement (view,
+/// cart, wishlist, purchase) resets it. See FatigueService.
+model RecExposure {
+  userKey         String    @db.VarChar(80)
+  productId       String    @db.Uuid
+  /// Unengaged showings since the last reset (counted at most once per hour).
+  impressions     Int       @default(0)
+  firstShownAt    DateTime  @default(now())
+  lastShownAt     DateTime  @default(now())
+  engagedAt       DateTime?
+  suppressedUntil DateTime?
+
+  @@id([userKey, productId])
+  @@index([suppressedUntil])
+  @@map("rec_exposures")
+}
+
+/// Kafka idempotency: events already applied (delivery is at-least-once).
+model ProcessedEvent {
+  eventId       String   @id @db.VarChar(64)
+  consumerGroup String   @db.VarChar(120)
+  processedAt   DateTime @default(now())
+
+  @@index([processedAt])
+  @@map("processed_events")
+}

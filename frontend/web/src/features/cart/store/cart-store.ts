@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { trackRecommendation } from '@/features/analytics/track';
 import type { Product } from '@/features/catalog/types';
 import { type CartLine, toCartLine } from '../types';
 
@@ -25,10 +26,12 @@ function clamp(quantity: number, max: number): number {
  */
 export const useCartStore = create<CartState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       lines: {},
 
-      addItem: (product, quantity = 1) =>
+      addItem: (product, quantity = 1) => {
+        // First add of a product is a strong interest signal for recommendations.
+        if (!get().lines[product.id]) trackRecommendation('cart', { productId: product.id });
         set((state) => {
           const existing = state.lines[product.id];
           const next = clamp(
@@ -39,7 +42,8 @@ export const useCartStore = create<CartState>()(
           return {
             lines: { ...state.lines, [product.id]: toCartLine(product, next) },
           };
-        }),
+        });
+      },
 
       setQuantity: (productId, quantity) =>
         set((state) => {

@@ -1,4 +1,5 @@
 import {
+  ChartColumnIncreasing,
   GalleryHorizontal,
   LayoutDashboard,
   Package,
@@ -19,6 +20,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { label: 'Insights', href: '/insights', icon: ChartColumnIncreasing },
   { label: 'Vendors', href: '/vendors', icon: Store, matchPrefix: true },
   { label: 'Products', href: '/products', icon: Package, matchPrefix: true },
   { label: 'Inventory', href: '/inventory', icon: Warehouse, matchPrefix: true },

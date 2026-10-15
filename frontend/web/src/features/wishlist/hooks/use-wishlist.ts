@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { trackRecommendation } from '@/features/analytics/track';
 import { queryKeys } from '@/lib/api';
 import { isApiError } from '@/lib/api/errors';
 import { useIsSignedIn } from '@/features/auth/hooks/use-session';
@@ -83,6 +84,9 @@ export function useToggleWishlist() {
       toast.error(isApiError(error) ? error.message : 'Could not update your wishlist.');
     },
 
+    onSuccess: (result, input) => {
+      if (result.saved) trackRecommendation('wishlist', { productId: input.productId });
+    },
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.wishlist.list() }),
   });
 }

@@ -27,6 +27,11 @@ export const endpoints = {
     /** Type-ahead: matching categories + products for a partial term. */
     suggest: '/catalog/search/suggest',
   },
+  recommendations: {
+    product: (productId: string) => `/recs/products/${productId}`,
+    cart: '/recs/cart',
+    forYou: '/recs/for-you',
+  },
   cart: {
     current: '/cart',
     items: '/cart/items',

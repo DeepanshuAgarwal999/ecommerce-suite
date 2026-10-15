@@ -189,6 +189,10 @@ export const configuration = () => ({
       host: process.env.NOTIFICATION_SERVICE_HOST ?? 'localhost',
       port: toInt(process.env.NOTIFICATION_SERVICE_TCP_PORT, 4008),
     },
+    recommendation: {
+      host: process.env.RECOMMENDATION_SERVICE_HOST ?? 'localhost',
+      port: toInt(process.env.RECOMMENDATION_SERVICE_TCP_PORT, 4009),
+    },
   } satisfies Record<string, TcpServiceEndpoint>,
 
   clients: {

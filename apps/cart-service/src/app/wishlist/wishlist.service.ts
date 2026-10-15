@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { AppException, rpc } from '@ecommerce/common';
-import { buildPaginationMeta, CatalogPatterns, ServiceTokens } from '@ecommerce/contracts';
+import { buildPaginationMeta, CacheKeys, CacheTtl, CatalogPatterns, ServiceTokens } from '@ecommerce/contracts';
+import { CacheService } from '@ecommerce/redis';
 import { PrismaService } from '../prisma/prisma.service';
 import { ToggleWishlistDto } from '@ecommerce/contracts';
 
@@ -25,7 +26,53 @@ export class WishlistService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(ServiceTokens.CATALOG) private readonly catalog: ClientProxy,
+    private readonly cache: CacheService,
   ) {}
+
+  /**
+   * Admin insights: products on the most wishlists right now, with how many of
+   * those saves happened in the last `days` days - all-time demand vs. current
+   * momentum. Counts distinct shoppers, so one person saving three variants of a
+   * product is one save. Served by the `wishlist_items(productId)` index.
+   */
+  async topWishlisted(days: number) {
+    return this.cache.wrap(
+      CacheKeys.adminInsights('wishlist', days),
+      async () => {
+        const rows = await this.prisma.$queryRaw<
+          { productId: string; title: string; imageUrl: string | null; saves: bigint; recent: bigint }[]
+        >`
+          SELECT "productId",
+                 max("title") AS title,
+                 max("imageUrl") AS "imageUrl",
+                 count(DISTINCT "userId")::bigint AS saves,
+                 count(DISTINCT "userId") FILTER (
+                   WHERE "createdAt" >= now() - make_interval(days => ${days}::int)
+                 )::bigint AS recent
+          FROM "wishlist_items"
+          GROUP BY "productId"
+          ORDER BY saves DESC, recent DESC
+          LIMIT 20
+        `;
+        const [totals] = await this.prisma.$queryRaw<{ saves: bigint; recent: bigint }[]>`
+          SELECT count(*)::bigint AS saves,
+                 count(*) FILTER (WHERE "createdAt" >= now() - make_interval(days => ${days}::int))::bigint AS recent
+          FROM "wishlist_items"
+        `;
+        return {
+          totals: { saves: Number(totals?.saves ?? 0), recent: Number(totals?.recent ?? 0) },
+          top: rows.map((row) => ({
+            productId: row.productId,
+            title: row.title,
+            imageUrl: row.imageUrl,
+            saves: Number(row.saves),
+            recent: Number(row.recent),
+          })),
+        };
+      },
+      { ttlSeconds: CacheTtl.ADMIN_INSIGHTS },
+    );
+  }
 
   async list(userId: string, query: { page?: number; limit?: number } = {}) {
     const page = Math.max(1, query.page ?? 1);
