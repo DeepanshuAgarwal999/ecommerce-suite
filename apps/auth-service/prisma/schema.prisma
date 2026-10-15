@@ -1,0 +1,196 @@
+// auth-service owns identity and nothing else.
+//
+// Mobile number is the primary identity: it is the login factor, it is unique, and it is
+// required. Email is optional and secondary - useful for invoices and account recovery,
+// never sufficient on its own to sign in. That ordering is deliberate and shows up in
+// the constraints below (mobile is NOT NULL + unique, email is nullable + unique).
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/@ecom-db/auth"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  VENDOR
+  USER
+  DELIVERY_PARTNER
+  SUPPORT
+}
+
+enum IdentityStatus {
+  ACTIVE
+  BLOCKED
+  DELETED
+}
+
+enum OtpPurpose {
+  LOGIN
+  SIGNUP
+  MOBILE_CHANGE
+  EMAIL_VERIFY
+  RESET_MPIN
+}
+
+enum DevicePlatform {
+  ANDROID
+  IOS
+  WEB
+}
+
+/// The account. One row per human.
+model Identity {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// E.164 without the plus, paired with countryCode. Unique across the platform.
+  mobile      String
+  countryCode String @default("+91") @db.VarChar(6)
+  /// Denormalised full E.164 so lookups are a single indexed equality check.
+  e164        String @unique @db.VarChar(20)
+
+  mobileVerifiedAt DateTime?
+
+  /// Secondary identifier. Nullable, because most users never provide one.
+  email           String?   @unique @db.VarChar(255)
+  emailVerifiedAt DateTime?
+
+  /// Optional 4/6-digit app PIN, bcrypt-hashed. Lets a returning user skip the OTP
+  /// round trip while keeping OTP as the recovery path.
+  mpinHash        String?
+  mpinFailedCount Int      @default(0)
+  mpinLockedUntil DateTime?
+
+  roles  Role[]         @default([USER])
+  status IdentityStatus @default(ACTIVE)
+
+  /// Bumped on logout-all, role change and block. Every JWT carries the version it was
+  /// minted with, so raising this invalidates outstanding tokens instantly.
+  tokenVersion Int @default(1)
+
+  blockedAt     DateTime?
+  blockedReason String?
+
+  referralCode   String? @unique @db.VarChar(12)
+  referredByCode String? @db.VarChar(12)
+
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  sessions     Session[]
+  otpRequests  OtpRequest[]
+  auditEntries AuthAudit[]
+
+  @@unique([countryCode, mobile])
+  @@index([status])
+  @@index([createdAt])
+  @@map("identities")
+}
+
+/// One row per signed-in device. Deleting a row revokes that device only.
+model Session {
+  id         String   @id @default(uuid()) @db.Uuid
+  identityId String   @db.Uuid
+  identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  /// SHA-256 of the refresh token. Storing the raw token would make a database leak an
+  /// instant account takeover for every logged-in user.
+  refreshTokenHash String @unique
+
+  deviceId   String?        @db.VarChar(128)
+  platform   DevicePlatform?
+  /// Which client signed in: ANDROID, IOS, WEB, ADMIN_WEB, VENDOR_WEB. Drives the
+  /// "where am I logged in" screen and lets a web-only breach be revoked selectively.
+  source     String?        @db.VarChar(20)
+  appVersion String?        @db.VarChar(20)
+  userAgent  String?        @db.VarChar(400)
+  ip         String?        @db.VarChar(64)
+
+  expiresAt DateTime
+  revokedAt DateTime?
+  /// Set when this session's refresh token is rotated, so reuse of an old token is
+  /// detectable and can trigger a full logout of the account.
+  replacedBySessionId String? @db.Uuid
+
+  lastUsedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([identityId, revokedAt])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// Audit trail of OTP issuance. The code itself lives in Redis with a TTL, never here -
+/// this table is for rate-limit forensics and SMS spend attribution.
+model OtpRequest {
+  id         String     @id @default(uuid()) @db.Uuid
+  identityId String?    @db.Uuid
+  identity   Identity?  @relation(fields: [identityId], references: [id], onDelete: SetNull)
+
+  e164    String     @db.VarChar(20)
+  purpose OtpPurpose
+
+  attempts   Int       @default(0)
+  verifiedAt DateTime?
+  expiresAt  DateTime
+
+  ip        String?  @db.VarChar(64)
+  userAgent String?  @db.VarChar(400)
+  createdAt DateTime @default(now())
+
+  @@index([e164, createdAt])
+  @@index([createdAt])
+  @@map("otp_requests")
+}
+
+/// Security-relevant events, kept separately from application logs so they survive log
+/// rotation and can be queried during an incident.
+model AuthAudit {
+  id         String    @id @default(uuid()) @db.Uuid
+  identityId String?   @db.Uuid
+  identity   Identity? @relation(fields: [identityId], references: [id], onDelete: SetNull)
+
+  action    String   @db.VarChar(60)
+  actorId   String?  @db.Uuid
+  metadata  Json?
+  ip        String?  @db.VarChar(64)
+  createdAt DateTime @default(now())
+
+  @@index([identityId, createdAt])
+  @@index([action, createdAt])
+  @@map("auth_audit")
+}
+
+/// Transactional outbox.
+///
+/// Events are written here inside the same transaction as the state change they
+/// describe, then shipped to Kafka by a background drainer. That makes "user registered"
+/// impossible to lose and impossible to publish for a transaction that rolled back.
+model OutboxEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  topic         String   @db.VarChar(120)
+  eventType     String   @db.VarChar(120)
+  eventVersion  Int      @default(1)
+  partitionKey  String   @db.VarChar(120)
+  payload       Json
+  correlationId String?  @db.VarChar(128)
+  causationId   String?  @db.VarChar(128)
+  actorId       String?  @db.VarChar(64)
+  /// Client source of the originating request (ANDROID, IOS, WEB, ...), for attribution.
+  source        String?  @db.VarChar(20)
+
+  publishedAt DateTime?
+  attempts    Int       @default(0)
+  lastError   String?   @db.VarChar(500)
+  createdAt   DateTime  @default(now())
+
+  /// Partial-style index for the drainer's hot query (unpublished, oldest first).
+  @@index([publishedAt, createdAt])
+  @@map("outbox_events")
+}

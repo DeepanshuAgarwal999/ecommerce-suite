@@ -1,0 +1,28 @@
+{
+  "name": "web",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "frontend/web/src",
+  "projectType": "application",
+  "tags": ["scope:web", "type:app"],
+  "// targets": "dev/start ports are set so the storefront (4200) never collides with api-gateway (3000). build pins NODE_ENV=production explicitly: with a stray/non-standard NODE_ENV in the invoking shell (e.g. left over from a Jest run), `next build`'s Turbopack prerenderer crashes every route with 'Cannot read properties of null (reading useContext)' — Next itself warns 'non-standard NODE_ENV'. Setting it here makes the build deterministic regardless of ambient shell state.",
+  "targets": {
+    "dev": {
+      "options": {
+        "command": "next dev --port 4200"
+      }
+    },
+    "build": {
+      "options": {
+        "command": "next build",
+        "env": {
+          "NODE_ENV": "production"
+        }
+      }
+    },
+    "start": {
+      "options": {
+        "command": "next start --port 4200"
+      }
+    }
+  }
+}

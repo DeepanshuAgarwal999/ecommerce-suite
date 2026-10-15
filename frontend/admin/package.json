@@ -1,0 +1,11 @@
+{
+  "name": "admin",
+  "version": "0.0.1",
+  "private": true,
+  "//": "frontend/* are npm workspaces, so anything the shadcn CLI installs from this folder hoists into the root node_modules and lockfile. Shared deps (next, react, tailwind, ...) stay in the root package.json; only UI-primitive deps the CLI pulls in live here.",
+  "dependencies": {
+    "@tanstack/react-table": "^8.21.3",
+    "date-fns": "^4.1.0",
+    "recharts": "^2.15.1"
+  }
+}

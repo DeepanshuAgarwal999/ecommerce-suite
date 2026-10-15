@@ -1,0 +1,220 @@
+// notification-service owns device tokens, the in-app inbox, delivery preferences and
+// message templates.
+//
+// "In-app notification" here means two things that must stay in sync: a Firebase Cloud
+// Messaging push that wakes the phone, and a durable `Notification` row that backs the
+// bell icon. Push alone is not enough - it is best-effort, the OS drops it if the app is
+// force-stopped, and there is no history. The row is the source of truth; FCM is the
+// delivery hint.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/@ecom-db/notification"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum NotificationChannel {
+  PUSH
+  IN_APP
+  SMS
+  EMAIL
+  WHATSAPP
+}
+
+enum NotificationCategory {
+  TRANSACTIONAL
+  ORDER
+  PAYMENT
+  PROMOTIONAL
+  ACCOUNT
+  SYSTEM
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SUPPRESSED
+}
+
+enum DevicePlatform {
+  ANDROID
+  IOS
+  WEB
+}
+
+/// A registered FCM token. One row per device per user.
+model DeviceToken {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+
+  /// The FCM registration token. Unique because Firebase reassigns a token to whichever
+  /// install currently holds it - if a device is handed to another user, the token must
+  /// move with it rather than be duplicated.
+  token    String         @unique @db.VarChar(400)
+  platform DevicePlatform
+
+  deviceId   String? @db.VarChar(128)
+  deviceModel String? @db.VarChar(120)
+  osVersion  String? @db.VarChar(40)
+  appVersion String? @db.VarChar(20)
+
+  isActive Boolean @default(true)
+  /// Set when FCM returns `registration-token-not-registered`. Sending to a dead token
+  /// forever wastes quota and skews delivery metrics, so we retire it on first failure.
+  failureCount Int @default(0)
+  lastFailureAt DateTime?
+
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, isActive])
+  @@index([lastSeenAt])
+  @@map("device_tokens")
+}
+
+/// The in-app inbox row. This is what the bell icon reads.
+model Notification {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+
+  category NotificationCategory
+  channels NotificationChannel[]
+
+  title String  @db.VarChar(200)
+  body  String  @db.VarChar(1000)
+  imageUrl String? @db.VarChar(500)
+  /// Where tapping it takes the user, e.g. `app://orders/ORD-4F2K9A-8213`.
+  deepLink String? @db.VarChar(500)
+
+  /// Structured payload the app can act on without parsing the body text.
+  data Json?
+
+  status NotificationStatus @default(QUEUED)
+  readAt DateTime?
+
+  /// Which template produced it, for analytics and A/B comparison.
+  templateKey String? @db.VarChar(80)
+  /// Collapses duplicates: two "order shipped" events for one order write one row.
+  dedupeKey   String? @db.VarChar(160)
+
+  /// What the send actually did, per channel: `{ "PUSH": "sent", "SMS": "skipped" }`.
+  deliveryLog Json?
+
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  expiresAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  /// The inbox query: newest unread first for one user.
+  @@index([userId, readAt, createdAt])
+  @@index([userId, createdAt])
+  @@unique([userId, dedupeKey])
+  @@index([status, scheduledAt])
+  @@map("notifications")
+}
+
+/// Per-user, per-category channel preferences.
+///
+/// Transactional messages ignore these - a customer cannot opt out of "your payment
+/// failed" - but promotional sends must respect them, both because it is right and
+/// because ignoring them gets a sender ID blocked.
+model NotificationPreference {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+
+  category NotificationCategory
+
+  pushEnabled     Boolean @default(true)
+  inAppEnabled    Boolean @default(true)
+  smsEnabled      Boolean @default(true)
+  emailEnabled    Boolean @default(false)
+  whatsappEnabled Boolean @default(false)
+
+  /// Local-time window during which non-urgent sends are held back, as `HH:mm`.
+  quietHoursStart String? @db.VarChar(5)
+  quietHoursEnd   String? @db.VarChar(5)
+  timezone        String  @default("Asia/Kolkata") @db.VarChar(60)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, category])
+  @@map("notification_preferences")
+}
+
+/// Message templates with `{{placeholder}}` interpolation.
+///
+/// Keeping copy in the database means marketing can reword a message without a deploy,
+/// and it is where the DLT template ids that Indian SMS regulation requires are stored.
+model NotificationTemplate {
+  id  String @id @default(uuid()) @db.Uuid
+  key String @unique @db.VarChar(80)
+
+  category NotificationCategory
+  channels NotificationChannel[]
+
+  titleTemplate String @db.VarChar(300)
+  bodyTemplate  String @db.VarChar(2000)
+  smsTemplate   String? @db.VarChar(1000)
+  /// TRAI-registered template id, required for transactional SMS in India.
+  dltTemplateId String? @db.VarChar(40)
+
+  deepLinkTemplate String? @db.VarChar(500)
+  imageUrl         String? @db.VarChar(500)
+
+  /// Names the caller must supply, checked before send so a broken template fails at
+  /// authoring time rather than reaching a customer as "Hi {{name}}".
+  requiredVariables String[]
+
+  isActive Boolean @default(true)
+  locale   String  @default("en") @db.VarChar(10)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category, isActive])
+  @@map("notification_templates")
+}
+
+/// Outbound SMS log. Separate from `Notification` because SMS costs real money per
+/// message and needs its own spend and deliverability reporting.
+model SmsLog {
+  id     String  @id @default(uuid()) @db.Uuid
+  userId String? @db.Uuid
+
+  e164     String @db.VarChar(20)
+  provider String @db.VarChar(40)
+  /// Never contains the OTP itself - only the template key that produced it.
+  templateKey String? @db.VarChar(80)
+
+  providerMessageId String? @db.VarChar(120)
+  status            String  @db.VarChar(40)
+  errorCode         String? @db.VarChar(60)
+  /// Provider-reported cost in paise.
+  costPaise         Int?
+
+  segments  Int      @default(1)
+  createdAt DateTime @default(now())
+
+  @@index([e164, createdAt])
+  @@index([status, createdAt])
+  @@map("sms_logs")
+}
+
+model ProcessedEvent {
+  eventId       String   @id @db.VarChar(64)
+  consumerGroup String   @db.VarChar(120)
+  processedAt   DateTime @default(now())
+
+  @@index([processedAt])
+  @@map("processed_events")
+}

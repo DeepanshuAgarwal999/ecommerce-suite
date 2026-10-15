@@ -1,0 +1,313 @@
+# Local stack.
+#
+#   npm run infra:up      -> postgres + redis + kafka + kafka-ui only (run services with nx)
+#   npm run stack:up      -> everything, including the nine services (profile: app)
+#
+# Ports are published for local convenience. In any real deployment only the gateway is
+# reachable from outside; every other service listens on the internal network alone.
+
+name: ecommerce
+
+x-service-env: &service-env
+  NODE_ENV: development
+  LOG_LEVEL: debug
+  PRETTY_LOGS: "false"
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  KAFKA_BROKERS: kafka:9092
+  KAFKA_AUTO_CREATE_TOPICS: "true"
+  JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-me-please-32chars-minimum}
+  JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-me-please-32chars-minimum}
+  OTP_DEV_FIXED_CODE: ${OTP_DEV_FIXED_CODE:-123456}
+  SMS_PROVIDER: ${SMS_PROVIDER:-console}
+  AUTH_SERVICE_HOST: auth-service
+  USER_SERVICE_HOST: user-service
+  CATALOG_SERVICE_HOST: catalog-service
+  INVENTORY_SERVICE_HOST: inventory-service
+  CART_SERVICE_HOST: cart-service
+  ORDER_SERVICE_HOST: order-service
+  PAYMENT_SERVICE_HOST: payment-service
+  NOTIFICATION_SERVICE_HOST: notification-service
+  AUTH_SERVICE_TCP_PORT: 4001
+  USER_SERVICE_TCP_PORT: 4002
+  CATALOG_SERVICE_TCP_PORT: 4003
+  INVENTORY_SERVICE_TCP_PORT: 4004
+  CART_SERVICE_TCP_PORT: 4005
+  ORDER_SERVICE_TCP_PORT: 4006
+  PAYMENT_SERVICE_TCP_PORT: 4007
+  NOTIFICATION_SERVICE_TCP_PORT: 4008
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  profiles: ["app"]
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    kafka:
+      condition: service_healthy
+  networks: [backend]
+  deploy:
+    resources:
+      limits:
+        memory: 512M
+
+services:
+  # ---------------------------------------------------------------------------
+  # Infrastructure
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:17-alpine
+    container_name: ecom-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ecom}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ecom}
+      POSTGRES_DB: postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
+    command:
+      # Tuned for a dev laptop; production values come from the managed instance.
+      - postgres
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - log_min_duration_statement=300
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ecom} -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [backend]
+
+  redis:
+    image: redis:7-alpine
+    container_name: ecom-redis
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 512mb
+      # Evict least-recently-used keys under pressure: everything in Redis here is a
+      # cache or a short-lived lock, so losing cold entries is the correct behaviour.
+      - --maxmemory-policy
+      - allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [backend]
+
+  kafka:
+    # KRaft mode - no ZooKeeper. One combined broker/controller node for local dev.
+    image: apache/kafka:3.9.0
+    container_name: ecom-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      # The image derives an advertised entry for any listener not in ADVERTISED_LISTENERS
+      # (the controller), and Kafka rejects 0.0.0.0 there - so bind the controller to the
+      # container hostname rather than the wildcard.
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://kafka:9093,EXTERNAL://0.0.0.0:29092
+      # Internal clients (the services) use kafka:9092; the host uses localhost:29092.
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Auto-create is off so partition counts are always a deliberate choice
+      # (see tools/scripts/create-topics.mjs and KafkaAdminService).
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_NUM_PARTITIONS: 6
+      KAFKA_LOG_RETENTION_HOURS: 168
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:-MkU3OEVBNTcwNTJENDM2Qk}
+    ports:
+      - "29092:29092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 20s
+    networks: [backend]
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: ecom-kafka-ui
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks: [backend]
+
+  # ---------------------------------------------------------------------------
+  # Services (profile: app)
+  # ---------------------------------------------------------------------------
+  api-gateway:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      args: { APP: api-gateway }
+    image: ecom/api-gateway
+    container_name: ecom-api-gateway
+    environment:
+      <<: *service-env
+      SERVICE_NAME: api-gateway
+      PORT: 3000
+      CORS_ORIGINS: "*"
+    ports:
+      - "3000:3000"
+    deploy:
+      replicas: 1
+
+  auth-service:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      args: { APP: auth-service }
+    image: ecom/auth-service
+    environment:
+      <<: *service-env
+      SERVICE_NAME: auth-service
+      PORT: 3001
+      TCP_PORT: 4001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ecom}:${POSTGRES_PASSWORD:-ecom}@postgres:5432/auth_db?schema=public
+
+  user-service:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      args: { APP: user-service }
+    image: ecom/user-service
+    environment:
+      <<: *service-env
+      SERVICE_NAME: user-service
+      PORT: 3002
+      TCP_PORT: 4002
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ecom}:${POSTGRES_PASSWORD:-ecom}@postgres:5432/user_db?schema=public
+
+  catalog-service:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      args: { APP: catalog-service }
+    image: ecom/catalog-service
+    environment:
+      <<: *service-env
+      SERVICE_NAME: catalog-service
+      PORT: 3003
+      TCP_PORT: 4003
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ecom}:${POSTGRES_PASSWORD:-ecom}@postgres:5432/catalog_db?schema=public
+
+  inventory-service:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      args: { APP: inventory-service }
+    image: ecom/inventory-service
+    environment:
+      <<: *service-env
+      SERVICE_NAME: inventory-service
+      PORT: 3004
+      TCP_PORT: 4004
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ecom}:${POSTGRES_PASSWORD:-ecom}@postgres:5432/inventory_db?schema=public
+
+  cart-service:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      args: { APP: cart-service }
+    image: ecom/cart-service
+    environment:
+      <<: *service-env
+      SERVICE_NAME: cart-service
+      PORT: 3005
+      TCP_PORT: 4005
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ecom}:${POSTGRES_PASSWORD:-ecom}@postgres:5432/cart_db?schema=public
+
+  order-service:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      args: { APP: order-service }
+    image: ecom/order-service
+    environment:
+      <<: *service-env
+      SERVICE_NAME: order-service
+      PORT: 3006
+      TCP_PORT: 4006
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ecom}:${POSTGRES_PASSWORD:-ecom}@postgres:5432/order_db?schema=public
+
+  payment-service:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      args: { APP: payment-service }
+    image: ecom/payment-service
+    environment:
+      <<: *service-env
+      SERVICE_NAME: payment-service
+      PORT: 3007
+      TCP_PORT: 4007
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ecom}:${POSTGRES_PASSWORD:-ecom}@postgres:5432/payment_db?schema=public
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-rzp_test_placeholder}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-placeholder}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-placeholder}
+
+  notification-service:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      args: { APP: notification-service }
+    image: ecom/notification-service
+    environment:
+      <<: *service-env
+      SERVICE_NAME: notification-service
+      PORT: 3008
+      TCP_PORT: 4008
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ecom}:${POSTGRES_PASSWORD:-ecom}@postgres:5432/notification_db?schema=public
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:-}
+      MSG91_AUTH_KEY: ${MSG91_AUTH_KEY:-}
+      MSG91_TEMPLATE_ID: ${MSG91_TEMPLATE_ID:-}
+
+volumes:
+  postgres-data:
+  redis-data:
+  kafka-data:
+
+networks:
+  backend:
+    driver: bridge

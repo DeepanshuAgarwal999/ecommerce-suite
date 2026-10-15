@@ -1,0 +1,387 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* ---------------------------------------------------------------------------
+ * Design tokens
+ *
+ * The shadcn-owned names (background/foreground/primary/accent/...) keep their
+ * conventional meaning so generated components stay correct — in particular
+ * `accent` is the subtle menu-hover colour, NOT the brand highlight. Brand and
+ * commerce semantics live in their own names below.
+ *
+ * Rebrand by editing the `--primary` and `--promo` ramps; nothing downstream
+ * references a raw colour.
+ * ------------------------------------------------------------------------- */
+:root {
+  --radius: 0.75rem;
+
+  --background: oklch(0.985 0.004 330);
+  --foreground: oklch(0.18 0.02 330);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.02 330);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.02 330);
+
+  /* Brand: bold violet-magenta */
+  --primary: oklch(0.47 0.23 330);
+  --primary-foreground: oklch(1 0 0);
+
+  --secondary: oklch(0.96 0.02 330);
+  --secondary-foreground: oklch(0.36 0.19 330);
+  --muted: oklch(0.96 0.008 330);
+  --muted-foreground: oklch(0.52 0.015 330);
+
+  /* Subtle hover/active surface used by menus, not a brand colour. */
+  --accent: oklch(0.96 0.012 330);
+  --accent-foreground: oklch(0.24 0.02 330);
+
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.92 0.008 330);
+  --input: oklch(0.90 0.01 330);
+  --ring: oklch(0.47 0.23 330);
+
+  /* Commerce semantics */
+  --brand-dark: oklch(0.36 0.19 330);
+  --highlight: oklch(0.66 0.24 350);
+  --highlight-foreground: oklch(1 0 0);
+  --promo: oklch(0.80 0.15 85);
+  --promo-foreground: oklch(0.26 0.06 85);
+  --success: oklch(0.55 0.16 150);
+  --success-foreground: oklch(1 0 0);
+  --warning: oklch(0.79 0.16 70);
+  --sale: oklch(0.62 0.22 30);
+  --sale-foreground: oklch(1 0 0);
+  --rating: oklch(0.80 0.15 85);
+
+  --chart-1: oklch(0.47 0.23 330);
+  --chart-2: oklch(0.66 0.24 350);
+  --chart-3: oklch(0.80 0.15 85);
+  --chart-4: oklch(0.55 0.16 150);
+  --chart-5: oklch(0.52 0.015 330);
+
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.18 0.02 330);
+  --sidebar-primary: oklch(0.47 0.23 330);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.96 0.012 330);
+  --sidebar-accent-foreground: oklch(0.24 0.02 330);
+  --sidebar-border: oklch(0.92 0.008 330);
+  --sidebar-ring: oklch(0.47 0.23 330);
+
+  /* Occasion surfaces. With no theme live they fall back to the everyday brand
+   * so festive-capable sections still look right; [data-occasion] presets below
+   * (and admin colour overrides, injected by OccasionStyle) retune them. */
+  --festive: var(--brand-dark);
+  --festive-foreground: oklch(1 0 0);
+  --festive-gold: var(--promo);
+  --festive-wash: var(--secondary);
+
+  /* Fixed chrome heights — pages offset their padding by these. */
+  --announcement-height: 2.5rem;
+  --header-height: 5rem;
+  --category-nav-height: 3.25rem;
+  --bottom-nav-height: 3.75rem;
+}
+
+.dark {
+  --background: oklch(0.16 0.015 330);
+  --foreground: oklch(0.97 0.01 330);
+  --card: oklch(0.21 0.02 330);
+  --card-foreground: oklch(0.97 0.01 330);
+  --popover: oklch(0.21 0.02 330);
+  --popover-foreground: oklch(0.97 0.01 330);
+
+  --primary: oklch(0.72 0.20 335);
+  --primary-foreground: oklch(0.16 0.015 330);
+
+  --secondary: oklch(0.27 0.03 330);
+  --secondary-foreground: oklch(0.97 0.01 330);
+  --muted: oklch(0.27 0.015 330);
+  --muted-foreground: oklch(0.70 0.015 330);
+
+  --accent: oklch(0.27 0.02 330);
+  --accent-foreground: oklch(0.97 0.01 330);
+
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.72 0.20 335);
+
+  --brand-dark: oklch(0.30 0.14 330);
+  --highlight: oklch(0.74 0.22 350);
+  --highlight-foreground: oklch(0.16 0.015 330);
+  --promo: oklch(0.82 0.15 85);
+  --promo-foreground: oklch(0.22 0.06 85);
+  --success: oklch(0.68 0.16 150);
+  --success-foreground: oklch(0.16 0.015 330);
+  --warning: oklch(0.83 0.15 70);
+  --sale: oklch(0.70 0.20 30);
+  --sale-foreground: oklch(0.16 0.015 330);
+  --rating: oklch(0.82 0.15 85);
+
+  --chart-1: oklch(0.72 0.20 335);
+  --chart-2: oklch(0.74 0.22 350);
+  --chart-3: oklch(0.82 0.15 85);
+  --chart-4: oklch(0.68 0.16 150);
+  --chart-5: oklch(0.70 0.015 330);
+
+  --sidebar: oklch(0.21 0.02 330);
+  --sidebar-foreground: oklch(0.97 0.01 330);
+  --sidebar-primary: oklch(0.72 0.20 335);
+  --sidebar-primary-foreground: oklch(0.16 0.015 330);
+  --sidebar-accent: oklch(0.27 0.02 330);
+  --sidebar-accent-foreground: oklch(0.97 0.01 330);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.72 0.20 335);
+}
+
+/* ---------------------------------------------------------------------------
+ * Occasion themes
+ *
+ * <html data-occasion="..."> is set by the root layout from the live StoreTheme
+ * (admin console → Storefront → Themes). Each preset re-points the brand ramp
+ * and the festive surfaces; light mode only, so dark mode stays legible.
+ * Garland artwork lives in features/theme, not here.
+ * ------------------------------------------------------------------------- */
+:root[data-occasion='diwali']:not(.dark) {
+  --background: oklch(0.985 0.012 80);
+  --primary: oklch(0.44 0.16 25);
+  --ring: oklch(0.44 0.16 25);
+  --brand-dark: oklch(0.33 0.12 25);
+  --secondary: oklch(0.96 0.03 75);
+  --secondary-foreground: oklch(0.36 0.13 25);
+  --highlight: oklch(0.68 0.18 50);
+  --promo: oklch(0.8 0.13 80);
+  --festive: oklch(0.42 0.17 25);
+  --festive-gold: oklch(0.8 0.13 80);
+  --festive-wash: oklch(0.96 0.04 82);
+}
+:root[data-occasion='navratri']:not(.dark) {
+  --background: oklch(0.985 0.012 60);
+  --primary: oklch(0.5 0.21 15);
+  --ring: oklch(0.5 0.21 15);
+  --brand-dark: oklch(0.36 0.15 15);
+  --secondary: oklch(0.96 0.03 50);
+  --highlight: oklch(0.72 0.17 60);
+  --promo: oklch(0.82 0.15 85);
+  --festive: oklch(0.45 0.19 10);
+  --festive-gold: oklch(0.82 0.15 85);
+  --festive-wash: oklch(0.96 0.04 60);
+}
+:root[data-occasion='holi']:not(.dark) {
+  --primary: oklch(0.56 0.24 350);
+  --ring: oklch(0.56 0.24 350);
+  --brand-dark: oklch(0.4 0.2 300);
+  --highlight: oklch(0.7 0.18 55);
+  --promo: oklch(0.86 0.17 95);
+  --festive: oklch(0.5 0.22 300);
+  --festive-gold: oklch(0.86 0.17 95);
+  --festive-wash: oklch(0.97 0.03 350);
+}
+:root[data-occasion='rakhi']:not(.dark) {
+  --background: oklch(0.985 0.01 40);
+  --primary: oklch(0.55 0.2 20);
+  --ring: oklch(0.55 0.2 20);
+  --brand-dark: oklch(0.38 0.14 15);
+  --highlight: oklch(0.7 0.17 50);
+  --promo: oklch(0.8 0.14 80);
+  --festive: oklch(0.5 0.18 20);
+  --festive-gold: oklch(0.8 0.14 80);
+  --festive-wash: oklch(0.97 0.025 40);
+}
+:root[data-occasion='independence']:not(.dark) {
+  --primary: oklch(0.4 0.15 265);
+  --ring: oklch(0.4 0.15 265);
+  --brand-dark: oklch(0.32 0.12 265);
+  --highlight: oklch(0.7 0.17 55);
+  --promo: oklch(0.74 0.17 55);
+  --festive: oklch(0.5 0.13 150);
+  --festive-gold: oklch(0.74 0.17 55);
+  --festive-wash: oklch(0.97 0.025 60);
+}
+:root[data-occasion='eid']:not(.dark) {
+  --background: oklch(0.985 0.008 120);
+  --primary: oklch(0.45 0.11 165);
+  --ring: oklch(0.45 0.11 165);
+  --brand-dark: oklch(0.32 0.08 170);
+  --secondary: oklch(0.96 0.02 160);
+  --highlight: oklch(0.72 0.13 80);
+  --promo: oklch(0.8 0.12 85);
+  --festive: oklch(0.38 0.09 170);
+  --festive-gold: oklch(0.8 0.12 85);
+  --festive-wash: oklch(0.97 0.02 120);
+}
+:root[data-occasion='christmas']:not(.dark) {
+  --primary: oklch(0.5 0.19 25);
+  --ring: oklch(0.5 0.19 25);
+  --brand-dark: oklch(0.36 0.09 155);
+  --highlight: oklch(0.55 0.13 150);
+  --promo: oklch(0.8 0.14 85);
+  --festive: oklch(0.42 0.1 155);
+  --festive-gold: oklch(0.8 0.14 85);
+  --festive-wash: oklch(0.97 0.015 150);
+}
+
+/* Holi: faint gulal splashes behind the whole page. */
+:root[data-occasion='holi']:not(.dark) body {
+  background-image:
+    radial-gradient(40rem 22rem at 8% 12%, oklch(0.66 0.25 350 / 0.07), transparent 70%),
+    radial-gradient(34rem 20rem at 92% 30%, oklch(0.86 0.17 95 / 0.1), transparent 70%),
+    radial-gradient(36rem 22rem at 20% 70%, oklch(0.62 0.19 150 / 0.06), transparent 70%),
+    radial-gradient(30rem 20rem at 85% 85%, oklch(0.6 0.2 260 / 0.06), transparent 70%);
+  background-attachment: fixed;
+}
+
+@theme inline {
+  --font-display: var(--font-lora), Georgia, serif;
+  --color-festive: var(--festive);
+  --color-festive-foreground: var(--festive-foreground);
+  --color-festive-gold: var(--festive-gold);
+  --color-festive-wash: var(--festive-wash);
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-bricolage), var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-brand-dark: var(--brand-dark);
+  --color-highlight: var(--highlight);
+  --color-highlight-foreground: var(--highlight-foreground);
+  --color-promo: var(--promo);
+  --color-promo-foreground: var(--promo-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-sale: var(--sale);
+  --color-sale-foreground: var(--sale-foreground);
+  --color-rating: var(--rating);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  --spacing-announcement: var(--announcement-height);
+  --spacing-header: var(--header-height);
+  --spacing-category-nav: var(--category-nav-height);
+  --spacing-bottom-nav: var(--bottom-nav-height);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-heading tracking-tight;
+  }
+
+  /* Tap targets should not flash blue mid-checkout on Android. */
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@utility container {
+  width: 100%;
+  max-width: 90rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+  @media (width >= 40rem) {
+    padding-inline: 1.5rem;
+  }
+  @media (width >= 80rem) {
+    padding-inline: 5rem;
+  }
+}
+
+@layer utilities {
+  /* Horizontal category / product rails — the Blinkit and Meesho staple. */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  .rail {
+    @apply scrollbar-none flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain;
+  }
+  .rail > * {
+    @apply snap-start shrink-0;
+  }
+
+  /* Deep festive panel with a scatter of gold flecks - the backdrop of Vaaree's
+   * arch tiles. Two offset dot grids read as random sparkle at a glance. */
+  .festive-surface {
+    background-color: var(--festive);
+    background-image:
+      radial-gradient(circle at center, color-mix(in oklch, var(--festive-gold) 70%, transparent) 0.7px, transparent 1.2px),
+      radial-gradient(circle at center, color-mix(in oklch, var(--festive-gold) 45%, transparent) 0.6px, transparent 1px);
+    background-size: 23px 29px, 37px 31px;
+    background-position: 0 0, 11px 13px;
+  }
+
+  .clip-arch {
+    clip-path: url(#arch-clip);
+  }
+
+  /* Respect the iOS home indicator under the fixed bottom nav. */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}

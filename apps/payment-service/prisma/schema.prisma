@@ -1,0 +1,231 @@
+// payment-service owns money movement and the Razorpay integration.
+//
+// Two rules shape this schema:
+//
+// 1. Never trust the client about payment outcome. The browser/app tells us "payment
+//    succeeded", but the authoritative signal is the webhook Razorpay sends server to
+//    server, verified by HMAC. `WebhookEvent` is therefore a first-class table, not a log.
+//
+// 2. Never lose a gateway response. Every request and callback is persisted before it is
+//    acted on, so a reconciliation job can always answer "what did Razorpay actually say"
+//    without calling their API again.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/@ecom-db/payment"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PaymentStatus {
+  CREATED
+  PENDING
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  CANCELLED
+  REFUND_PENDING
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  NETBANKING
+  WALLET
+  EMI
+  PAY_LATER
+  COD
+}
+
+enum PaymentGateway {
+  RAZORPAY
+  COD
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+model Payment {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// One live payment attempt per order. A retry after failure creates a new row with
+  /// the same orderId, so this is indexed rather than unique.
+  orderId     String @db.Uuid
+  orderNumber String @db.VarChar(24)
+  userId      String @db.Uuid
+
+  gateway PaymentGateway @default(RAZORPAY)
+  status  PaymentStatus  @default(CREATED)
+  method  PaymentMethod?
+
+  /// Paise. Must equal the order's grandTotal at creation - checked before the gateway
+  /// call, because a mismatch here means a customer is charged the wrong amount.
+  amount         Int
+  /// How much has actually been captured, which can lag `amount` on a two-step flow.
+  capturedAmount Int    @default(0)
+  refundedAmount Int    @default(0)
+  currency       String @default("INR") @db.VarChar(3)
+
+  /// Razorpay's `order_id` (order_XXXX). Unique because we create exactly one per attempt.
+  gatewayOrderId   String? @unique @db.VarChar(64)
+  /// Razorpay's `payment_id` (pay_XXXX), only known after the customer pays.
+  gatewayPaymentId String? @unique @db.VarChar(64)
+  /// The signature the client returned, kept for dispute forensics.
+  gatewaySignature String? @db.VarChar(256)
+
+  /// Card network, bank, VPA - whatever the gateway reports. Never card numbers: this
+  /// service is not in PCI scope and must not become so.
+  methodDetails Json?
+
+  failureCode   String? @db.VarChar(80)
+  failureReason String? @db.VarChar(500)
+
+  /// Makes "create checkout" safe to retry from a flaky mobile connection.
+  idempotencyKey String? @unique @db.VarChar(128)
+
+  authorizedAt DateTime?
+  capturedAt   DateTime?
+  failedAt     DateTime?
+  /// Razorpay orders expire; after this we must create a fresh one.
+  expiresAt    DateTime?
+
+  /// Set by the reconciliation job once this row has been matched against the gateway's
+  /// own settlement report.
+  reconciledAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refunds  Refund[]
+  attempts PaymentAttempt[]
+
+  @@index([orderId])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([reconciledAt])
+  @@map("payments")
+}
+
+/// One row per customer-visible attempt against a payment (UPI declined, then card).
+/// Useful for measuring where checkout leaks.
+model PaymentAttempt {
+  id        String  @id @default(uuid()) @db.Uuid
+  paymentId String  @db.Uuid
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  method        PaymentMethod?
+  status        String         @db.VarChar(40)
+  gatewayPaymentId String?     @db.VarChar(64)
+  errorCode     String?        @db.VarChar(80)
+  errorReason   String?        @db.VarChar(500)
+  rawResponse   Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([paymentId, createdAt])
+  @@map("payment_attempts")
+}
+
+model Refund {
+  id        String  @id @default(uuid()) @db.Uuid
+  paymentId String  @db.Uuid
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  orderId String @db.Uuid
+  userId  String @db.Uuid
+
+  amount   Int
+  currency String @default("INR") @db.VarChar(3)
+  status   RefundStatus @default(PENDING)
+
+  gatewayRefundId String? @unique @db.VarChar(64)
+  /// `normal` settles in days, `optimum` is instant where the bank supports it.
+  speed           String  @default("normal") @db.VarChar(20)
+
+  reason      String? @db.VarChar(400)
+  /// Which return or cancellation triggered it.
+  referenceType String? @db.VarChar(40)
+  referenceId   String? @db.VarChar(64)
+
+  /// Guards against a double refund when a cancellation is retried.
+  idempotencyKey String? @unique @db.VarChar(128)
+
+  initiatedBy String?   @db.Uuid
+  processedAt DateTime?
+  failureReason String? @db.VarChar(500)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([paymentId])
+  @@index([orderId])
+  @@index([status, createdAt])
+  @@map("refunds")
+}
+
+/// Every webhook Razorpay sends, stored verbatim before processing.
+///
+/// Razorpay retries webhooks, and retries can arrive out of order or in parallel. The
+/// unique `gatewayEventId` turns "process this webhook" into an insert that either
+/// succeeds once or conflicts - which is the whole idempotency mechanism.
+model WebhookEvent {
+  id String @id @default(uuid()) @db.Uuid
+
+  gatewayEventId String @unique @db.VarChar(120)
+  eventType      String @db.VarChar(80)
+
+  /// The exact bytes received, kept because the HMAC is over the raw body.
+  rawPayload Json
+  signature  String @db.VarChar(256)
+  signatureValid Boolean @default(false)
+
+  processed     Boolean   @default(false)
+  processedAt   DateTime?
+  processingError String? @db.VarChar(500)
+  attempts      Int       @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([processed, createdAt])
+  @@index([eventType, createdAt])
+  @@map("webhook_events")
+}
+
+model OutboxEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  topic         String   @db.VarChar(120)
+  eventType     String   @db.VarChar(120)
+  eventVersion  Int      @default(1)
+  partitionKey  String   @db.VarChar(120)
+  payload       Json
+  correlationId String?  @db.VarChar(128)
+  causationId   String?  @db.VarChar(128)
+  actorId       String?  @db.VarChar(64)
+  /// Client source of the originating request (ANDROID, IOS, WEB, ...), for attribution.
+  source        String?  @db.VarChar(20)
+
+  publishedAt DateTime?
+  attempts    Int       @default(0)
+  lastError   String?   @db.VarChar(500)
+  createdAt   DateTime  @default(now())
+
+  @@index([publishedAt, createdAt])
+  @@map("outbox_events")
+}
+
+model ProcessedEvent {
+  eventId       String   @id @db.VarChar(64)
+  consumerGroup String   @db.VarChar(120)
+  processedAt   DateTime @default(now())
+
+  @@index([processedAt])
+  @@map("processed_events")
+}

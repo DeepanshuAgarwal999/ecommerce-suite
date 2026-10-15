@@ -1,0 +1,64 @@
+/**
+ * Every gateway path this console knows about, in one place. When a route
+ * moves, this file is the only edit.
+ */
+export const endpoints = {
+  auth: {
+    requestOtp: '/auth/otp/request',
+    verifyOtp: '/auth/otp/verify',
+    refresh: '/auth/refresh',
+    session: '/auth/me',
+    logout: '/auth/logout',
+  },
+  /** Public storefront routes the console also reads from (category/brand pickers). */
+  catalog: {
+    categories: '/catalog/categories',
+    brands: '/catalog/brands',
+    /** The theme the storefront is showing right now - same resolver, so the console never disagrees with it. */
+    liveTheme: '/catalog/home/theme',
+  },
+  admin: {
+    vendors: '/admin/vendors',
+    vendorsSummary: '/admin/vendors/summary',
+    vendor: (id: string) => `/admin/vendors/${id}`,
+    vendorReview: (id: string) => `/admin/vendors/${id}/review`,
+    products: '/admin/products',
+    productsSummary: '/admin/products/summary',
+    product: (id: string) => `/admin/products/${id}`,
+    productReview: (id: string) => `/admin/products/${id}/review`,
+    inventory: '/admin/inventory',
+    inventoryAdjust: '/admin/inventory/adjust',
+    inventoryMovements: '/admin/inventory/movements',
+    lowStock: '/admin/inventory/low-stock',
+    warehouses: '/admin/warehouses',
+    orders: '/admin/orders',
+    ordersSummary: '/admin/orders/summary',
+    ordersTrend: '/admin/orders/trend',
+    order: (id: string) => `/admin/orders/${id}`,
+    orderStatus: (id: string) => `/admin/orders/${id}/status`,
+    orderCancel: (id: string) => `/admin/orders/${id}/cancel`,
+    users: '/admin/users',
+    userRoles: (id: string) => `/admin/users/${id}/roles`,
+    userBlock: (id: string) => `/admin/users/${id}/block`,
+    banners: '/admin/banners',
+    banner: (id: string) => `/admin/banners/${id}`,
+    reorderBanners: '/admin/banners/reorder',
+    homeSections: '/admin/home-sections',
+    homeSection: (id: string) => `/admin/home-sections/${id}`,
+    reorderHomeSections: '/admin/home-sections/reorder',
+    sectionTiles: (sectionId: string) => `/admin/home-sections/${sectionId}/tiles`,
+    sectionTile: (sectionId: string, tileId: string) =>
+      `/admin/home-sections/${sectionId}/tiles/${tileId}`,
+    reorderSectionTiles: (sectionId: string) => `/admin/home-sections/${sectionId}/tiles/reorder`,
+    themes: '/admin/themes',
+    theme: (id: string) => `/admin/themes/${id}`,
+    footerColumns: '/admin/footer/columns',
+    footerColumn: (id: string) => `/admin/footer/columns/${id}`,
+    reorderFooterColumns: '/admin/footer/columns/reorder',
+    footerLinks: (columnId: string) => `/admin/footer/columns/${columnId}/links`,
+    footerLink: (columnId: string, linkId: string) => `/admin/footer/columns/${columnId}/links/${linkId}`,
+    reorderFooterLinks: (columnId: string) => `/admin/footer/columns/${columnId}/links/reorder`,
+    footerSettings: '/admin/footer/settings',
+    resetCache: '/admin/settings/reset-cache',
+  },
+} as const;

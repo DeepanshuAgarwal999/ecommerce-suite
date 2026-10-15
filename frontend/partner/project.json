@@ -1,0 +1,28 @@
+{
+  "name": "partner",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "frontend/partner/src",
+  "projectType": "application",
+  "tags": ["scope:partner", "type:app"],
+  "// targets": "dev/start ports are set so the seller console (4201) never collides with web (4200) or api-gateway (3000). build pins NODE_ENV=production — see frontend/web/project.json for why (a stray shell NODE_ENV crashes Next's Turbopack prerenderer).",
+  "targets": {
+    "dev": {
+      "options": {
+        "command": "next dev --port 4201"
+      }
+    },
+    "build": {
+      "options": {
+        "command": "next build",
+        "env": {
+          "NODE_ENV": "production"
+        }
+      }
+    },
+    "start": {
+      "options": {
+        "command": "next start --port 4201"
+      }
+    }
+  }
+}
