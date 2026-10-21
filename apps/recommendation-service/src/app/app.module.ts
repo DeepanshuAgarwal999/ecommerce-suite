@@ -14,6 +14,7 @@ import { LearnConsumer } from './learning/learn.consumer';
 import { ModelBuilderService } from './learning/model-builder.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { RecommendationController } from './recommendation.controller';
+import { ProductActivityService } from './serving/product-activity.service';
 import { RecommendationService } from './serving/recommendation.service';
 
 @Module({
@@ -46,6 +47,7 @@ import { RecommendationService } from './serving/recommendation.service';
     FatigueService,
     IngestService,
     RecommendationService,
+    ProductActivityService,
     LearnConsumer,
     ModelBuilderService,
     CatalogSyncService,

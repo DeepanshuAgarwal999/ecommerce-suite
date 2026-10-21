@@ -15,6 +15,8 @@ export const PaymentStatus = {
 export type PaymentStatus = (typeof PaymentStatus)[keyof typeof PaymentStatus];
 
 export const PaymentMethod = {
+  /** Order-level: "pay online via the gateway" - the instrument is chosen in the gateway widget. */
+  ONLINE: 'ONLINE',
   UPI: 'UPI',
   CARD: 'CARD',
   NETBANKING: 'NETBANKING',
@@ -26,9 +28,16 @@ export const PaymentMethod = {
 
 export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
 
+/**
+ * Which gateway processed a payment. Adding a gateway = one entry here, one in the
+ * payment-service Prisma enum, and one adapter class (see payment-service
+ * `providers/`). COD is "no gateway"; MOCK is a dev-only stand-in that is refused
+ * in production.
+ */
 export const PaymentGateway = {
   RAZORPAY: 'RAZORPAY',
   COD: 'COD',
+  MOCK: 'MOCK',
 } as const;
 
 export type PaymentGateway = (typeof PaymentGateway)[keyof typeof PaymentGateway];
@@ -49,17 +58,3 @@ export type RefundStatus = (typeof RefundStatus)[keyof typeof RefundStatus];
 export const CURRENCY_MINOR_UNIT_FACTOR = 100;
 
 export const DEFAULT_CURRENCY = 'INR';
-
-/** Razorpay's own event names, as they arrive on the webhook. */
-export const RazorpayWebhookEvents = {
-  PAYMENT_AUTHORIZED: 'payment.authorized',
-  PAYMENT_CAPTURED: 'payment.captured',
-  PAYMENT_FAILED: 'payment.failed',
-  ORDER_PAID: 'order.paid',
-  REFUND_CREATED: 'refund.created',
-  REFUND_PROCESSED: 'refund.processed',
-  REFUND_FAILED: 'refund.failed',
-} as const;
-
-export type RazorpayWebhookEvent =
-  (typeof RazorpayWebhookEvents)[keyof typeof RazorpayWebhookEvents];

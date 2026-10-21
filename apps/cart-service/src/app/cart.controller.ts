@@ -65,9 +65,15 @@ export class CartController {
         addressId: msg.dto.addressId,
         pincode: msg.dto.pincode,
         paymentMethod: msg.dto.paymentMethod,
+        items: msg.dto.items,
       },
       msg.ctx,
     );
+  }
+
+  @MessagePattern(CartPatterns.ADMIN_PRODUCT_WISHLIST)
+  productWishlist(@Payload() msg: { productId: string; months: number }) {
+    return this.wishlist.productWishlist(msg.productId, msg.months);
   }
 
   @MessagePattern(CartPatterns.ADMIN_TOP_WISHLISTED)

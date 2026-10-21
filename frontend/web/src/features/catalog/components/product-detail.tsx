@@ -4,6 +4,7 @@ import { Price } from '@/components/common/price';
 import { RatingBadge } from '@/components/common/rating-badge';
 import { Separator } from '@/components/ui/separator';
 import { AddToCartButton } from '@/features/cart/components/add-to-cart-button';
+import { BuyNowButton } from '@/features/checkout/components/buy-now-button';
 import { WishlistButton } from '@/features/wishlist/components/wishlist-button';
 import { formatPackSize } from '@/lib/utils/format';
 import type { Product } from '../types';
@@ -59,11 +60,14 @@ export function ProductDetail({ product }: { product: Product }) {
         <Price pricePaise={product.pricePaise} mrpPaise={product.mrpPaise} size="lg" />
         <p className="text-muted-foreground -mt-2 text-xs">Inclusive of all taxes</p>
 
-        <div className="flex max-w-sm items-center gap-2.5">
-          <div className="flex-1">
-            <AddToCartButton product={product} />
+        <div className="flex max-w-sm flex-col gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="flex-1">
+              <AddToCartButton product={product} />
+            </div>
+            <WishlistButton product={product} className="shrink-0" />
           </div>
-          <WishlistButton product={product} className="shrink-0" />
+          <BuyNowButton product={product} />
         </div>
 
         <Separator />

@@ -30,10 +30,12 @@ import { CacheService } from '@ecommerce/redis';
 import { Prisma } from '@ecom-db/order';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateOrderDto, UpdateOrderStatusDto } from '@ecommerce/contracts';
+import { CreateOrderDto, QuoteOrderDto, UpdateOrderStatusDto } from '@ecommerce/contracts';
 
 interface CheckoutSnapshot {
-  cartId: string;
+  /** null for a DIRECT snapshot (explicit items, server cart untouched). */
+  cartId: string | null;
+  basket?: 'CART' | 'DIRECT';
   couponCode: string | null;
   lines: {
     productId: string;
@@ -115,10 +117,7 @@ export class OrderService {
         where: { idempotencyKey: dto.idempotencyKey },
         include: { items: true },
       });
-      if (existing) {
-        this.logger.log(`idempotent replay for key ${dto.idempotencyKey} -> ${existing.id}`);
-        return existing;
-      }
+      if (existing) return this.replay(existing, user.id, dto);
     }
 
     const [address, snapshot] = await Promise.all([
@@ -137,6 +136,8 @@ export class OrderService {
             addressId: dto.addressId,
             paymentMethod: dto.paymentMethod,
             pincode: dto.pincode,
+            // Direct items ("Buy now" / browser cart) are priced instead of the server cart.
+            items: dto.items,
           },
           ctx,
         },
@@ -158,104 +159,255 @@ export class OrderService {
     const orderNumber = generateOrderNumber();
     const reservationId = randomUUID();
 
-    const order = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.order.create({
-        data: {
-          orderNumber,
-          userId: user.id,
-          userMobile: user.mobile,
-          userEmail: user.email,
-          status: OrderStatus.PENDING_PAYMENT,
-          fulfilmentType: dto.fulfilmentType ?? FulfilmentType.STANDARD,
-          source: ctx.source ?? 'API',
-          appVersion: ctx.appVersion,
-          itemTotal: snapshot.totals.itemTotal,
-          discountTotal: snapshot.totals.discountTotal,
-          shippingTotal: snapshot.totals.shippingTotal,
-          taxTotal: snapshot.totals.taxTotal,
-          codFee: snapshot.totals.codFee,
-          grandTotal: snapshot.totals.grandTotal,
-          couponCode: snapshot.couponCode,
-          paymentMethod: dto.paymentMethod,
-          shippingAddress: this.freezeAddress(address) as never,
-          reservationId,
-          idempotencyKey: dto.idempotencyKey,
-          notes: dto.notes,
-          items: {
-            create: snapshot.lines.map((line, index) => {
-              const discount = discountShares[index] ?? 0;
-              const taxable = line.lineTotal - discount;
-              return {
-                productId: line.productId,
-                variantId: line.variantId,
-                sku: line.sku,
-                vendorId: line.vendorId,
-                vendorName: line.vendorName,
-                title: line.title,
-                imageUrl: line.imageUrl,
-                options: line.options as never,
-                quantity: line.quantity,
-                unitPrice: line.unitPrice,
-                unitMrp: line.unitMrp,
-                discount,
-                taxBps: line.taxBps,
-                taxAmount: Math.round((taxable * line.taxBps) / 10_000),
-                lineTotal: line.lineTotal,
-              };
-            }),
-          },
-          statusHistory: {
-            create: { toStatus: OrderStatus.PENDING_PAYMENT, changedBy: user.id },
-          },
-          saga: {
-            create: {
-              status: SagaStatus.AWAITING_INVENTORY,
-              currentStep: 'ORDER_CREATED',
-              timeoutAt: new Date(Date.now() + this.holdSeconds * 1000),
+    let order;
+    try {
+      order = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.order.create({
+          data: {
+            orderNumber,
+            userId: user.id,
+            userMobile: user.mobile,
+            userEmail: user.email,
+            status: OrderStatus.PENDING_PAYMENT,
+            fulfilmentType: dto.fulfilmentType ?? FulfilmentType.STANDARD,
+            source: ctx.source ?? 'API',
+            appVersion: ctx.appVersion,
+            itemTotal: snapshot.totals.itemTotal,
+            discountTotal: snapshot.totals.discountTotal,
+            shippingTotal: snapshot.totals.shippingTotal,
+            taxTotal: snapshot.totals.taxTotal,
+            codFee: snapshot.totals.codFee,
+            grandTotal: snapshot.totals.grandTotal,
+            couponCode: snapshot.couponCode,
+            paymentMethod: dto.paymentMethod,
+            shippingAddress: this.freezeAddress(address) as never,
+            reservationId,
+            idempotencyKey: dto.idempotencyKey,
+            notes: dto.notes,
+            items: {
+              create: snapshot.lines.map((line, index) => {
+                const discount = discountShares[index] ?? 0;
+                const taxable = line.lineTotal - discount;
+                return {
+                  productId: line.productId,
+                  variantId: line.variantId,
+                  sku: line.sku,
+                  vendorId: line.vendorId,
+                  vendorName: line.vendorName,
+                  title: line.title,
+                  imageUrl: line.imageUrl,
+                  options: line.options as never,
+                  quantity: line.quantity,
+                  unitPrice: line.unitPrice,
+                  unitMrp: line.unitMrp,
+                  discount,
+                  taxBps: line.taxBps,
+                  taxAmount: Math.round((taxable * line.taxBps) / 10_000),
+                  lineTotal: line.lineTotal,
+                };
+              }),
+            },
+            statusHistory: {
+              create: { toStatus: OrderStatus.PENDING_PAYMENT, changedBy: user.id },
+            },
+            saga: {
+              create: {
+                status: SagaStatus.AWAITING_INVENTORY,
+                currentStep: 'ORDER_CREATED',
+                timeoutAt: new Date(Date.now() + this.holdSeconds * 1000),
+              },
             },
           },
-        },
-        include: { items: true },
-      });
+          include: { items: true },
+        });
 
-      await tx.outboxEvent.create({
-        data: outboxRow({
-          topic: KafkaTopics.ORDER_CREATED,
-          partitionKey: created.id,
-          correlationId: ctx.correlationId,
-          actorId: user.id,
-          source: ctx.source,
-          payload: this.toCreatedPayload(created, created.items),
-        }),
-      });
+        await tx.outboxEvent.create({
+          data: outboxRow({
+            topic: KafkaTopics.ORDER_CREATED,
+            partitionKey: created.id,
+            correlationId: ctx.correlationId,
+            actorId: user.id,
+            source: ctx.source,
+            // DIRECT orders must not empty the shopper's server cart (see cart-service consumer).
+            payload: { ...this.toCreatedPayload(created, created.items), basket: snapshot.basket ?? 'CART' },
+          }),
+        });
 
-      // Kicks off the saga. inventory-service answers on its own topic.
-      await tx.outboxEvent.create({
-        data: outboxRow({
-          topic: KafkaTopics.STOCK_RESERVE_REQUESTED,
-          partitionKey: created.id,
-          correlationId: ctx.correlationId,
-          actorId: user.id,
-          source: ctx.source,
-          payload: {
-            orderId: created.id,
-            reservationId,
-            userId: user.id,
-            holdSeconds: this.holdSeconds,
-            lines: created.items.map((item) => ({
-              sku: item.sku,
-              variantId: item.variantId,
-              quantity: item.quantity,
-            })),
-          },
-        }),
-      });
+        // Kicks off the saga. inventory-service answers on its own topic.
+        await tx.outboxEvent.create({
+          data: outboxRow({
+            topic: KafkaTopics.STOCK_RESERVE_REQUESTED,
+            partitionKey: created.id,
+            correlationId: ctx.correlationId,
+            actorId: user.id,
+            source: ctx.source,
+            payload: {
+              orderId: created.id,
+              reservationId,
+              userId: user.id,
+              holdSeconds: this.holdSeconds,
+              lines: created.items.map((item) => ({
+                sku: item.sku,
+                variantId: item.variantId,
+                quantity: item.quantity,
+              })),
+            },
+          }),
+        });
 
-      return created;
-    });
+        return created;
+      });
+    } catch (error) {
+      // Two identical requests raced (double-tap, client retry before the first
+      // answered): both missed the lookup above, the unique index stopped the second
+      // insert. Answer it with the order the first one created.
+      if (
+        dto.idempotencyKey &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const winner = await this.prisma.order.findUnique({
+          where: { idempotencyKey: dto.idempotencyKey },
+          include: { items: true },
+        });
+        if (winner) return this.replay(winner, user.id, dto);
+      }
+      throw error;
+    }
 
     this.logger.log(`order ${order.orderNumber} created for ${user.id}`);
     return order;
+  }
+
+  /**
+   * Exact price for explicit items - same cart-service pricing as `create`, nothing
+   * persisted or reserved. Direct items only: quoting the server cart would lock it.
+   */
+  async quote(dto: QuoteOrderDto, ctx: RequestContext) {
+    const snapshot = await rpc<CheckoutSnapshot>(
+      this.cart,
+      CartPatterns.CHECKOUT_SNAPSHOT,
+      {
+        userId: ctx.userId ?? 'quote',
+        // Not used by direct pricing; the snapshot contract still requires the field.
+        dto: { addressId: '00000000-0000-4000-8000-000000000000', paymentMethod: dto.paymentMethod, pincode: dto.pincode, items: dto.items },
+        ctx,
+      },
+      { timeoutMs: this.rpcTimeout, service: 'cart-service' },
+    );
+    return {
+      lines: snapshot.lines.map((line) => ({
+        productId: line.productId,
+        variantId: line.variantId,
+        title: line.title,
+        imageUrl: line.imageUrl,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        unitMrp: line.unitMrp,
+        lineTotal: line.lineTotal,
+      })),
+      totals: snapshot.totals,
+    };
+  }
+
+  /**
+   * An Idempotency-Key we've seen before: hand back the original order - but only to
+   * the same shopper for the same request. Keys are unique platform-wide, so without
+   * the owner check a leaked key would return someone else's order; and reusing a key
+   * for a different basket is a client bug that must fail loudly, not silently return
+   * the old order (the Stripe rule).
+   */
+  private replay(
+    existing: Prisma.OrderGetPayload<{ include: { items: true } }>,
+    userId: string,
+    dto: CreateOrderDto,
+  ) {
+    const conflict = (reason: string) =>
+      new AppException(ErrorCode.IDEMPOTENCY_CONFLICT, reason, HttpStatus.UNPROCESSABLE_ENTITY);
+
+    if (existing.userId !== userId) throw conflict('This Idempotency-Key has already been used');
+    if (existing.paymentMethod !== dto.paymentMethod) {
+      throw conflict('This Idempotency-Key was used for an order with a different payment method');
+    }
+    if (dto.items?.length) {
+      const sum = (rows: { productId: string; quantity: number }[]) => {
+        const totals = new Map<string, number>();
+        rows.forEach((row) => totals.set(row.productId, (totals.get(row.productId) ?? 0) + row.quantity));
+        return [...totals].sort(([a], [b]) => a.localeCompare(b)).map(([id, qty]) => `${id}x${qty}`).join(',');
+      };
+      if (sum(dto.items) !== sum(existing.items)) {
+        throw conflict('This Idempotency-Key was used for a different set of items');
+      }
+    }
+    this.logger.log(`idempotent replay for key ${dto.idempotencyKey} -> ${existing.id}`);
+    return existing;
+  }
+
+  /**
+   * Sales history for one product (admin product insights): per month and for the
+   * last 90 days. Sold = the order went through (not draft / unpaid / failed /
+   * cancelled); cancellations and returns are reported separately so a product that
+   * sells but keeps coming back is visible.
+   */
+  async productSales(productId: string, months: number) {
+    type MonthRow = { month: string; orders: bigint; units: bigint; revenue: bigint; cancelled_units: bigint; returned_units: bigint };
+    const [monthly, last90, buyers] = await Promise.all([
+      this.prisma.$queryRaw<MonthRow[]>`
+        SELECT to_char(date_trunc('month', o."createdAt" AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM') AS month,
+               count(DISTINCT o."id") FILTER (WHERE o."status" NOT IN ('DRAFT','PENDING_PAYMENT','PAYMENT_FAILED','CANCELLED'))::bigint AS orders,
+               coalesce(sum(oi."quantity") FILTER (WHERE o."status" NOT IN ('DRAFT','PENDING_PAYMENT','PAYMENT_FAILED','CANCELLED')), 0)::bigint AS units,
+               coalesce(sum(oi."lineTotal") FILTER (WHERE o."status" NOT IN ('DRAFT','PENDING_PAYMENT','PAYMENT_FAILED','CANCELLED')), 0)::bigint AS revenue,
+               coalesce(sum(oi."quantity") FILTER (WHERE o."status" = 'CANCELLED'), 0)::bigint AS cancelled_units,
+               coalesce(sum(oi."quantity") FILTER (WHERE oi."status" = 'RETURNED'), 0)::bigint AS returned_units
+        FROM "order_items" oi JOIN "orders" o ON o."id" = oi."orderId"
+        WHERE oi."productId" = ${productId}::uuid
+          AND o."createdAt" >= date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata') - make_interval(months => ${months - 1}::int)
+        GROUP BY 1 ORDER BY 1`,
+      this.prisma.$queryRaw<{ orders: bigint; units: bigint; revenue: bigint; cancelled_units: bigint; returned_units: bigint; buyers: bigint }[]>`
+        SELECT count(DISTINCT o."id") FILTER (WHERE o."status" NOT IN ('DRAFT','PENDING_PAYMENT','PAYMENT_FAILED','CANCELLED'))::bigint AS orders,
+               coalesce(sum(oi."quantity") FILTER (WHERE o."status" NOT IN ('DRAFT','PENDING_PAYMENT','PAYMENT_FAILED','CANCELLED')), 0)::bigint AS units,
+               coalesce(sum(oi."lineTotal") FILTER (WHERE o."status" NOT IN ('DRAFT','PENDING_PAYMENT','PAYMENT_FAILED','CANCELLED')), 0)::bigint AS revenue,
+               coalesce(sum(oi."quantity") FILTER (WHERE o."status" = 'CANCELLED'), 0)::bigint AS cancelled_units,
+               coalesce(sum(oi."quantity") FILTER (WHERE oi."status" = 'RETURNED'), 0)::bigint AS returned_units,
+               count(DISTINCT o."userId") FILTER (WHERE o."status" NOT IN ('DRAFT','PENDING_PAYMENT','PAYMENT_FAILED','CANCELLED'))::bigint AS buyers
+        FROM "order_items" oi JOIN "orders" o ON o."id" = oi."orderId"
+        WHERE oi."productId" = ${productId}::uuid AND o."createdAt" >= now() - interval '90 days'`,
+      this.prisma.$queryRaw<{ buyers: bigint; repeat_buyers: bigint; first_sale: Date | null; last_sale: Date | null }[]>`
+        SELECT count(*)::bigint AS buyers, count(*) FILTER (WHERE n > 1)::bigint AS repeat_buyers,
+               min(first_at) AS first_sale, max(last_at) AS last_sale
+        FROM (
+          SELECT o."userId", count(DISTINCT o."id") AS n, min(o."createdAt") AS first_at, max(o."createdAt") AS last_at
+          FROM "order_items" oi JOIN "orders" o ON o."id" = oi."orderId"
+          WHERE oi."productId" = ${productId}::uuid AND o."status" NOT IN ('DRAFT','PENDING_PAYMENT','PAYMENT_FAILED','CANCELLED')
+          GROUP BY o."userId"
+        ) per_buyer`,
+    ]);
+    const n = (value: bigint | null | undefined) => Number(value ?? 0);
+    const l = last90[0];
+    return {
+      monthly: monthly.map((row) => ({
+        month: row.month,
+        orders: n(row.orders),
+        units: n(row.units),
+        revenue: n(row.revenue),
+        cancelledUnits: n(row.cancelled_units),
+        returnedUnits: n(row.returned_units),
+      })),
+      last90: {
+        orders: n(l?.orders),
+        units: n(l?.units),
+        revenue: n(l?.revenue),
+        cancelledUnits: n(l?.cancelled_units),
+        returnedUnits: n(l?.returned_units),
+        buyers: n(l?.buyers),
+      },
+      lifetime: {
+        buyers: n(buyers[0]?.buyers),
+        repeatBuyers: n(buyers[0]?.repeat_buyers),
+        firstSaleAt: buyers[0]?.first_sale?.toISOString() ?? null,
+        lastSaleAt: buyers[0]?.last_sale?.toISOString() ?? null,
+      },
+    };
   }
 
   async getById(orderId: string, userId?: string) {
@@ -266,6 +418,8 @@ export class OrderService {
         statusHistory: { orderBy: { createdAt: 'desc' }, take: 20 },
         shipments: true,
         returns: { include: { items: true } },
+        // payment-service only opens a payment once stock is held (see createCheckout).
+        saga: { select: { inventoryReserved: true, status: true } },
       },
     });
 

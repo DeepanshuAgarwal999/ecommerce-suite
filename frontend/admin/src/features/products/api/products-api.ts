@@ -10,6 +10,20 @@ import type {
   UpdateProductInput,
 } from '../types';
 
+export interface PendingReview {
+  id: string;
+  productId: string;
+  userId: string;
+  userName: string;
+  orderId: string | null;
+  isVerifiedPurchase: boolean;
+  rating: number;
+  title: string | null;
+  comment: string | null;
+  imageUrls: string[];
+  createdAt: string;
+}
+
 export const productsApi = {
   list: (query: ProductListQuery) =>
     api.get<Paginated<AdminProductListItem>>(endpoints.admin.products, { searchParams: { ...query } }),
@@ -40,4 +54,18 @@ export const productsApi = {
    *  instead of calling `count()` once per status. */
   summary: () =>
     api.get<{ status: ProductStatus; count: number }[]>(endpoints.admin.productsSummary),
+
+  /** Pending product reviews awaiting moderation (unpublished). */
+  pendingReviews: (query?: { page?: number; limit?: number; productId?: string }) =>
+    api.get<Paginated<PendingReview>>(endpoints.admin.pendingReviews, {
+      searchParams: { ...query },
+    }),
+
+  /** Approve = publish + fold stars into the product average. */
+  approveReview: (reviewId: string) =>
+    api.post<{ id: string; isPublished: boolean }>(endpoints.admin.reviewApprove(reviewId), {}),
+
+  /** Reject = unpublish + remove stars from the product average. */
+  rejectReview: (reviewId: string) =>
+    api.post<{ id: string; isPublished: boolean }>(endpoints.admin.reviewReject(reviewId), {}),
 };

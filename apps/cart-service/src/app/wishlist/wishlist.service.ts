@@ -74,6 +74,24 @@ export class WishlistService {
     );
   }
 
+  /** Wishlist saves for one product, by month, plus how many shoppers have it saved now. */
+  async productWishlist(productId: string, months: number) {
+    const [monthly, [current]] = await Promise.all([
+      this.prisma.$queryRaw<{ month: string; saves: bigint }[]>`
+        SELECT to_char(date_trunc('month', "createdAt" AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM') AS month, count(*)::bigint AS saves
+        FROM "wishlist_items"
+        WHERE "productId" = ${productId}::uuid
+          AND "createdAt" >= date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata') - make_interval(months => ${months - 1}::int)
+        GROUP BY 1 ORDER BY 1`,
+      this.prisma.$queryRaw<{ savers: bigint }[]>`
+        SELECT count(DISTINCT "userId")::bigint AS savers FROM "wishlist_items" WHERE "productId" = ${productId}::uuid`,
+    ]);
+    return {
+      monthly: monthly.map((row) => ({ month: row.month, saves: Number(row.saves) })),
+      savedNow: Number(current?.savers ?? 0),
+    };
+  }
+
   async list(userId: string, query: { page?: number; limit?: number } = {}) {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(50, Math.max(1, query.limit ?? 20));

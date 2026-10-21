@@ -22,6 +22,7 @@ export const productFormSchema = z
     imageUrls: z.string().optional().or(z.literal('')),
     isReturnable: z.boolean(),
     isCodAvailable: z.boolean(),
+    deliveryPrice: z.number().int().min(0).optional(),
     variants: z.array(variantSchema).min(1, 'Add at least one variant'),
   })
   .refine((data) => data.variants.every((v) => v.price <= v.mrp), {

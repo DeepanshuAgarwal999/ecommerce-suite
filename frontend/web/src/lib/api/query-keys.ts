@@ -29,6 +29,13 @@ export const queryKeys = {
     cart: (productIds: string[]) => [...queryKeys.recommendations.all, 'cart', productIds] as const,
     forYou: () => [...queryKeys.recommendations.all, 'for-you'] as const,
   },
+  addresses: {
+    all: ['addresses'] as const,
+    list: () => [...queryKeys.addresses.all, 'list'] as const,
+  },
+  geo: {
+    pincode: (pincode: string) => ['geo', 'pincode', pincode] as const,
+  },
   cart: {
     all: ['cart'] as const,
     current: () => [...queryKeys.cart.all, 'current'] as const,

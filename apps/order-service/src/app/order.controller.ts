@@ -4,6 +4,7 @@ import { OrderPatterns, OrderStatus, RequestContext } from '@ecommerce/contracts
 import {
   CancelOrderDto,
   CreateOrderDto,
+  QuoteOrderDto,
   RequestReturnDto,
   UpdateOrderStatusDto,
 } from '@ecommerce/contracts';
@@ -16,6 +17,11 @@ export class OrderController {
     private readonly orders: OrderService,
     private readonly returns: ReturnService,
   ) {}
+
+  @MessagePattern(OrderPatterns.QUOTE)
+  quote(@Payload() msg: { dto: QuoteOrderDto; ctx: RequestContext }) {
+    return this.orders.quote(msg.dto, msg.ctx);
+  }
 
   @MessagePattern(OrderPatterns.CREATE_ORDER)
   create(
@@ -53,6 +59,11 @@ export class OrderController {
   @MessagePattern(OrderPatterns.ADMIN_ORDERS_SUMMARY)
   summary() {
     return this.orders.summary();
+  }
+
+  @MessagePattern(OrderPatterns.ADMIN_PRODUCT_SALES)
+  productSales(@Payload() msg: { productId: string; months: number }) {
+    return this.orders.productSales(msg.productId, msg.months);
   }
 
   @MessagePattern(OrderPatterns.ADMIN_TOP_PRODUCTS)

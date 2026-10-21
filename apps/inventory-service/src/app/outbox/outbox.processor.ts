@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron, CronExpression, Interval } from '@nestjs/schedule';
 import { KafkaProducerService, OutboxDrainer } from '@ecommerce/kafka';
 import { LockService } from '@ecommerce/redis';
 import { ServiceNames } from '@ecommerce/contracts';
@@ -35,7 +35,13 @@ export class OutboxProcessor implements OnModuleInit {
     );
   }
 
-  @Cron(CronExpression.EVERY_5_SECONDS)
+  /**
+   * 500 ms: this service is on the checkout path (order -> stock hold -> payment ->
+   * confirmation is several outbox hops), so a 5 s cron added up to ~10-20 s of
+   * waiting per checkout. A tick that finds nothing is one Redis lock + one indexed
+   * query; the overlap guard and lock below still make it single-flight.
+   */
+  @Interval(500)
   async drain(): Promise<void> {
     // Guard against overlap when a batch takes longer than the interval.
     if (this.draining) return;

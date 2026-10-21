@@ -63,6 +63,12 @@ export class CreateAddressDto {
   @IsOptional()
   label?: AddressType;
 
+  @ApiPropertyOptional({ example: "Mom's place", description: 'Custom name, used when label is OTHER' })
+  @IsString()
+  @MaxLength(40)
+  @IsOptional()
+  labelName?: string;
+
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
@@ -219,4 +225,17 @@ export class ReviewVendorDto {
   @Type(() => Number)
   @IsOptional()
   commissionBps?: number;
+}
+
+/** Map pin -> address fields. */
+export class ReverseGeocodeQueryDto {
+  @ApiProperty({ example: 12.9716 })
+  @Type(() => Number)
+  @IsLatitude()
+  lat!: number;
+
+  @ApiProperty({ example: 77.5946 })
+  @Type(() => Number)
+  @IsLongitude()
+  lng!: number;
 }

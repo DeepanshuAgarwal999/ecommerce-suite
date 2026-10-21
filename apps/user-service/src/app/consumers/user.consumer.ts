@@ -69,10 +69,16 @@ export class UserConsumer implements OnApplicationBootstrap {
     });
     if (alreadyApplied) return;
 
-    await handler();
+    try {
+      await handler();
 
-    await this.prisma.processedEvent.create({
-      data: { eventId: envelope.eventId, consumerGroup: group },
-    });
+      await this.prisma.processedEvent.create({
+        data: { eventId: envelope.eventId, consumerGroup: group },
+      });
+    } catch (error) {
+      // Let the retry / redelivery actually re-run it (see IdempotencyService.releaseEvent).
+      await this.idempotency.releaseEvent(group, envelope.eventId);
+      throw error;
+    }
   }
 }

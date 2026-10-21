@@ -82,6 +82,8 @@ model Address {
   user   UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   label       AddressType @default(HOME)
+  /// Shopper's own name for an OTHER address - "Mom's place", "Gym". Null for HOME/WORK.
+  labelName   String?     @db.VarChar(40)
   fullName    String      @db.VarChar(120)
   /// Delivery contact, which is often not the account holder (gifts, family orders).
   phone       String      @db.VarChar(20)

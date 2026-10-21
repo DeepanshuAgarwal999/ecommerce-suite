@@ -11,7 +11,8 @@ import {
 import { outboxRow } from '@ecommerce/kafka';
 import { Prisma } from '@ecom-db/payment';
 import { PrismaService } from '../prisma/prisma.service';
-import { RazorpayClient, RazorpayRefund } from '../razorpay/razorpay.client';
+import type { GatewayRefund } from '../providers/payment-provider';
+import { PaymentProviderRegistry } from '../providers/payment-provider.registry';
 
 export interface RefundInput {
   paymentId?: string;
@@ -42,7 +43,7 @@ export class RefundService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly razorpay: RazorpayClient,
+    private readonly providers: PaymentProviderRegistry,
   ) {}
 
   async create(input: RefundInput, ctx: RequestContext) {
@@ -68,7 +69,7 @@ export class RefundService {
 
     if (payment.gateway === PaymentGateway.COD) {
       // Nothing was collected online; a COD "refund" is a manual bank transfer handled
-      // outside the gateway. Record it so the ledger balances, but skip Razorpay.
+      // outside the gateway. Record it so the ledger balances, but skip the gateway.
       return this.recordManualRefund(payment.id, input, idempotencyKey, ctx);
     }
 
@@ -85,49 +86,62 @@ export class RefundService {
     if (amount <= 0) throw AppException.validation('Refund amount must be positive');
 
     // Reserve the amount against the payment atomically. The predicate is the guard.
-    const refund = await this.prisma.$transaction(async (tx) => {
-      const { count } = await tx.payment.updateMany({
-        where: {
-          id: payment.id,
-          refundedAmount: { lte: payment.capturedAmount - amount },
-        },
-        data: {
-          refundedAmount: { increment: amount },
-          status: PaymentStatus.REFUND_PENDING,
-        },
-      });
+    let refund;
+    try {
+      refund = await this.prisma.$transaction(async (tx) => {
+        const { count } = await tx.payment.updateMany({
+          where: {
+            id: payment.id,
+            refundedAmount: { lte: payment.capturedAmount - amount },
+          },
+          data: {
+            refundedAmount: { increment: amount },
+            status: PaymentStatus.REFUND_PENDING,
+          },
+        });
 
-      if (count === 0) {
-        throw new AppException(
-          ErrorCode.REFUND_NOT_ALLOWED,
-          'Refund amount exceeds what can still be refunded on this payment',
-          HttpStatus.CONFLICT,
-        );
+        if (count === 0) {
+          throw new AppException(
+            ErrorCode.REFUND_NOT_ALLOWED,
+            'Refund amount exceeds what can still be refunded on this payment',
+            HttpStatus.CONFLICT,
+          );
+        }
+
+        return tx.refund.create({
+          data: {
+            paymentId: payment.id,
+            orderId: payment.orderId,
+            userId: payment.userId,
+            amount,
+            currency: payment.currency,
+            status: RefundStatus.PENDING,
+            speed: input.instant ? 'optimum' : 'normal',
+            reason: input.reason,
+            referenceType: input.referenceType,
+            referenceId: input.referenceId,
+            idempotencyKey,
+            initiatedBy: ctx.userId,
+          },
+        });
+      });
+    } catch (error) {
+      // Same idempotency key raced (retried cancellation, two consumers): the unique
+      // index stopped the second insert and rolled back its reservation. Return the
+      // refund the first one created instead of an error.
+      if (idempotencyKey && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const winner = await this.prisma.refund.findUnique({ where: { idempotencyKey } });
+        if (winner) return winner;
       }
-
-      return tx.refund.create({
-        data: {
-          paymentId: payment.id,
-          orderId: payment.orderId,
-          userId: payment.userId,
-          amount,
-          currency: payment.currency,
-          status: RefundStatus.PENDING,
-          speed: input.instant ? 'optimum' : 'normal',
-          reason: input.reason,
-          referenceType: input.referenceType,
-          referenceId: input.referenceId,
-          idempotencyKey,
-          initiatedBy: ctx.userId,
-        },
-      });
-    });
+      throw error;
+    }
 
     // Gateway call outside the transaction: a network hang must not hold a DB lock.
     try {
-      const gatewayRefund = await this.razorpay.refund({
-        paymentId: payment.gatewayPaymentId as string,
-        amountPaise: amount,
+      // Refunded through the gateway that took the payment, whatever is active today.
+      const gatewayRefund = await this.providers.forGateway(payment.gateway).refund({
+        gatewayPaymentId: payment.gatewayPaymentId as string,
+        amount,
         receipt: refund.id,
         notes: { orderId: payment.orderId, reason: input.reason ?? '' },
         instant: input.instant,
@@ -155,25 +169,20 @@ export class RefundService {
   }
 
   /**
-   * Applies a Razorpay refund object, from either the API response or a webhook.
-   * Idempotent on `gatewayRefundId`.
+   * Applies a gateway refund (already normalised by its adapter), from either the API
+   * response or a webhook. Idempotent on `gatewayRefundId`.
    */
-  async applyGatewayState(gatewayRefund: RazorpayRefund, ctx: RequestContext, localId?: string) {
+  async applyGatewayState(gatewayRefund: GatewayRefund, ctx: RequestContext, localId?: string) {
     const refund = localId
       ? await this.prisma.refund.findUnique({ where: { id: localId } })
-      : await this.prisma.refund.findUnique({ where: { gatewayRefundId: gatewayRefund.id } });
+      : await this.prisma.refund.findUnique({ where: { gatewayRefundId: gatewayRefund.gatewayRefundId } });
 
     if (!refund) {
-      this.logger.warn(`refund webhook for unknown gateway refund ${gatewayRefund.id}`);
+      this.logger.warn(`refund webhook for unknown gateway refund ${gatewayRefund.gatewayRefundId}`);
       return null;
     }
 
-    const nextStatus: RefundStatus =
-      gatewayRefund.status === 'processed'
-        ? RefundStatus.PROCESSED
-        : gatewayRefund.status === 'failed'
-          ? RefundStatus.FAILED
-          : RefundStatus.PENDING;
+    const nextStatus: RefundStatus = gatewayRefund.status;
 
     if (refund.status === nextStatus && refund.gatewayRefundId) return refund;
 
@@ -181,7 +190,7 @@ export class RefundService {
       const updated = await tx.refund.update({
         where: { id: refund.id },
         data: {
-          gatewayRefundId: gatewayRefund.id,
+          gatewayRefundId: gatewayRefund.gatewayRefundId,
           status: nextStatus,
           processedAt: nextStatus === RefundStatus.PROCESSED ? new Date() : undefined,
         },
@@ -215,7 +224,7 @@ export class RefundService {
               currency: refund.currency,
               status: nextStatus,
               reason: refund.reason ?? undefined,
-              gatewayRefundId: gatewayRefund.id,
+              gatewayRefundId: gatewayRefund.gatewayRefundId,
             },
           }),
         });

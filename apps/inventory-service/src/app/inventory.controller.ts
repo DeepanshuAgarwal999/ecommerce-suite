@@ -59,6 +59,11 @@ export class InventoryController {
     return this.stock.adjust(msg, msg.ctx);
   }
 
+  @MessagePattern(InventoryPatterns.PRODUCT_STOCK)
+  productStock(@Payload() msg: { productId: string }) {
+    return this.stock.productStock(msg.productId);
+  }
+
   @MessagePattern(InventoryPatterns.LIST_STOCK)
   listStock(
     @Payload()

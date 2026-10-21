@@ -36,6 +36,17 @@ import {
  * pages sort and filter by price across thousands of rows, and doing that through a join
  * to variants makes the query an order of magnitude slower.
  */
+/** Admin product list orderings. `id` last keeps paging stable on ties. */
+const ADMIN_SORTS: Record<string, Prisma.ProductOrderByWithRelationInput[]> = {
+  updated: [{ updatedAt: 'desc' }, { id: 'asc' }],
+  newest: [{ createdAt: 'desc' }, { id: 'asc' }],
+  title: [{ title: 'asc' }, { id: 'asc' }],
+  price_asc: [{ minPrice: 'asc' }, { id: 'asc' }],
+  price_desc: [{ minPrice: 'desc' }, { id: 'asc' }],
+  best_selling: [{ soldCount: 'desc' }, { id: 'asc' }],
+  rating: [{ ratingAverage: 'desc' }, { ratingCount: 'desc' }, { id: 'asc' }],
+};
+
 /** Columns a storefront product listing needs - shared by every search path. */
 const SEARCH_SELECT = {
   id: true,
@@ -355,11 +366,28 @@ export class ProductService {
    * Bulk variant lookup used by cart and order to price a basket in one round trip
    * instead of one call per line.
    */
-  async resolveVariants(variantIds: string[]) {
-    if (variantIds.length === 0) return [];
+  /**
+   * Variants by id - plus, for `productIds`, each product's default variant (the one a
+   * shopper gets when they buy from a listing without choosing). Used to price carts
+   * and direct ("Buy now") checkouts.
+   */
+  async resolveVariants(variantIds: string[], productIds: string[] = []) {
+    if (variantIds.length === 0 && productIds.length === 0) return [];
+
+    let ids = variantIds;
+    if (productIds.length) {
+      const defaults = await this.prisma.productVariant.findMany({
+        where: { productId: { in: productIds }, isActive: true },
+        orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+        select: { id: true, productId: true },
+      });
+      const firstPerProduct = new Map<string, string>();
+      for (const row of defaults) if (!firstPerProduct.has(row.productId)) firstPerProduct.set(row.productId, row.id);
+      ids = [...new Set([...variantIds, ...firstPerProduct.values()])];
+    }
 
     return this.prisma.productVariant.findMany({
-      where: { id: { in: variantIds }, isActive: true },
+      where: { id: { in: ids }, isActive: true },
       select: {
         id: true,
         sku: true,
@@ -450,6 +478,15 @@ export class ProductService {
     });
     const byId = new Map(rows.map((row) => [row.id, row]));
     return ids.map((id) => byId.get(id)).filter(Boolean);
+  }
+
+  /** Which of these external ids already exist for a source - bulk import idempotency. */
+  async findByExternalIds(source: string, externalIds: string[]) {
+    if (!externalIds.length) return [];
+    return this.prisma.product.findMany({
+      where: { externalSource: source, externalProductId: { in: externalIds.slice(0, 500) } },
+      select: { id: true, externalProductId: true, status: true },
+    });
   }
 
   /** Paged id/category/status for every product - recommendation-service's backfill. */
@@ -627,15 +664,16 @@ export class ProductService {
     page?: number;
     limit?: number;
     q?: string;
-    status?: ProductStatus;
+    status?: ProductStatus | 'ALL';
     vendorId?: string;
     categoryId?: string;
+    sort?: string;
   }): Promise<Paginated<unknown>> {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(100, Math.max(1, query.limit ?? 20));
 
     const where: Prisma.ProductWhereInput = {
-      status: query.status ?? { not: ProductStatus.DRAFT },
+      ...(query.status === 'ALL' ? {} : { status: query.status ?? { not: ProductStatus.DRAFT } }),
       ...(query.vendorId ? { vendorId: query.vendorId } : {}),
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
       ...(query.q
@@ -652,7 +690,7 @@ export class ProductService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.product.findMany({
         where,
-        orderBy: [{ updatedAt: 'desc' }],
+        orderBy: ADMIN_SORTS[query.sort ?? 'updated'] ?? ADMIN_SORTS['updated'],
         skip: (page - 1) * limit,
         take: limit,
         select: {

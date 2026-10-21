@@ -2,6 +2,7 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { RequestContext, UserPatterns, VendorStatus } from '@ecommerce/contracts';
 import { AddressService } from './address/address.service';
+import { GeoService } from './address/geo.service';
 import { ProfileService } from './profile/profile.service';
 import {
   ApplyVendorDto,
@@ -18,6 +19,7 @@ export class UserController {
     private readonly profiles: ProfileService,
     private readonly addresses: AddressService,
     private readonly vendors: VendorService,
+    private readonly geo: GeoService,
   ) {}
 
   // --- profile -------------------------------------------------------------
@@ -69,11 +71,26 @@ export class UserController {
     return this.addresses.setDefault(msg.userId, msg.addressId);
   }
 
+  @MessagePattern(UserPatterns.GEO_REVERSE)
+  reverseGeocode(@Payload() msg: { latitude: number; longitude: number }) {
+    return this.geo.reverse(Number(msg.latitude), Number(msg.longitude));
+  }
+
+  @MessagePattern(UserPatterns.GEO_PINCODE)
+  lookupPincode(@Payload() msg: { pincode: string }) {
+    return this.geo.pincode(String(msg.pincode));
+  }
+
   // --- vendors -------------------------------------------------------------
 
   @MessagePattern(UserPatterns.APPLY_VENDOR)
   applyVendor(@Payload() msg: { userId: string; dto: ApplyVendorDto; ctx: RequestContext }) {
     return this.vendors.apply(msg.userId, msg.dto, msg.ctx);
+  }
+
+  @MessagePattern(UserPatterns.GET_VENDORS_BY_CODES)
+  getVendorsByCodes(@Payload() msg: { codes: string[] }) {
+    return this.vendors.getByCodes(msg.codes ?? []);
   }
 
   @MessagePattern(UserPatterns.GET_VENDOR)

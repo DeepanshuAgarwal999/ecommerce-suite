@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsObject,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -17,25 +18,22 @@ export class CreateCheckoutDto {
   orderId!: string;
 }
 
-/** The three values the Razorpay SDK hands back to the app after a successful payment. */
-export class VerifyCheckoutDto {
-  @ApiProperty({ example: 'order_NXhF9q2x3kL0Ab' })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(64)
-  razorpayOrderId!: string;
-
-  @ApiProperty({ example: 'pay_NXhGQ8p1m9Zt7C' })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(64)
-  razorpayPaymentId!: string;
-
+/**
+ * The browser/app reports the outcome of the gateway's checkout widget.
+ *
+ * `gatewayResponse` is passed through untouched - whatever the active gateway's SDK
+ * returned (Razorpay: razorpay_order_id / razorpay_payment_id / razorpay_signature;
+ * another gateway: its own fields). Only that gateway's adapter interprets it, so a
+ * gateway switch never changes this contract.
+ */
+export class ConfirmPaymentDto {
   @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(256)
-  razorpaySignature!: string;
+  @IsUUID()
+  paymentId!: string;
+
+  @ApiProperty({ type: Object, example: { razorpay_payment_id: 'pay_XXXX', razorpay_order_id: 'order_XXXX', razorpay_signature: '...' } })
+  @IsObject()
+  gatewayResponse!: Record<string, unknown>;
 }
 
 export class CreateRefundDto {

@@ -11,7 +11,10 @@ import { ServiceNames } from '@ecommerce/contracts';
 import { RedisModule } from '@ecommerce/redis';
 import { AdminController } from './admin/admin.controller';
 import { InsightsAdminController } from './admin/insights-admin.controller';
+import { ProductImportController } from './admin/product-import.controller';
+import { ProductInsightsController } from './admin/product-insights.controller';
 import { RecommendationController } from './recommendation/recommendation.controller';
+import { GeoController } from './users/geo.controller';
 import { MerchandisingAdminController } from './admin/merchandising-admin.controller';
 import { AuthCookieService } from './auth/auth-cookie.service';
 import { AuthController } from './auth/auth.controller';
@@ -50,6 +53,8 @@ import { VendorController } from './vendor/vendor.controller';
     HealthModule,
   ],
   controllers: [
+    ProductImportController,
+    ProductInsightsController,
     AuthController,
     UsersController,
     CatalogController,
@@ -62,6 +67,7 @@ import { VendorController } from './vendor/vendor.controller';
     MerchandisingAdminController,
     InsightsAdminController,
     RecommendationController,
+    GeoController,
   ],
   providers: [
     GatewayService,

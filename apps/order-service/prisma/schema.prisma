@@ -52,6 +52,9 @@ enum FulfilmentType {
 }
 
 enum PaymentMethod {
+  /// Pay online through the active gateway; the actual instrument (UPI, card...) is
+  /// recorded on the payment once the shopper has paid.
+  ONLINE
   UPI
   CARD
   NETBANKING

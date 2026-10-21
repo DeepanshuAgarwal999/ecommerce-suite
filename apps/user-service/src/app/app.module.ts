@@ -5,6 +5,7 @@ import { ServiceNames } from '@ecommerce/contracts';
 import { KafkaModule } from '@ecommerce/kafka';
 import { RedisModule } from '@ecommerce/redis';
 import { AddressService } from './address/address.service';
+import { GeoService } from './address/geo.service';
 import { UserConsumer } from './consumers/user.consumer';
 import { OutboxProcessor } from './outbox/outbox.processor';
 import { PrismaModule } from './prisma/prisma.module';
@@ -22,6 +23,6 @@ import { VendorService } from './vendor/vendor.service';
     HealthModule,
   ],
   controllers: [UserController],
-  providers: [ProfileService, AddressService, VendorService, UserConsumer, OutboxProcessor],
+  providers: [ProfileService, AddressService, GeoService, VendorService, UserConsumer, OutboxProcessor],
 })
 export class AppModule {}

@@ -11,7 +11,8 @@ const REQUIRED_BY_SERVICE: Record<string, string[]> = {
   'inventory-service': ['DATABASE_URL'],
   'cart-service': ['DATABASE_URL'],
   'order-service': ['DATABASE_URL'],
-  'payment-service': ['DATABASE_URL', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'],
+  // Gateway credentials are checked by the active payment adapter at boot.
+  'payment-service': ['DATABASE_URL'],
   'notification-service': ['DATABASE_URL'],
   'recommendation-service': ['DATABASE_URL'],
 };

@@ -36,6 +36,8 @@ export enum ErrorCode {
   PRODUCT_UNAVAILABLE = 'PRODUCT_UNAVAILABLE',
   VARIANT_NOT_FOUND = 'VARIANT_NOT_FOUND',
   INSUFFICIENT_STOCK = 'INSUFFICIENT_STOCK',
+  /** Stock for the order is still being reserved - retry in a moment (payment waits for it). */
+  STOCK_RESERVATION_PENDING = 'STOCK_RESERVATION_PENDING',
   VENDOR_NOT_APPROVED = 'VENDOR_NOT_APPROVED',
 
   // cart / order

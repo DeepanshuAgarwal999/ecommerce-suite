@@ -1,4 +1,6 @@
-// payment-service owns money movement and the Razorpay integration.
+// payment-service owns money movement. Gateways (Razorpay today) plug in as adapters
+// behind one PaymentProvider interface - see src/app/providers. Nothing in this schema
+// is gateway-specific except the `gateway` discriminator on each row.
 //
 // Two rules shape this schema:
 //
@@ -33,6 +35,9 @@ enum PaymentStatus {
 }
 
 enum PaymentMethod {
+  /// Pay online through the active gateway; the actual instrument (UPI, card...) is
+  /// recorded on the payment once the shopper has paid.
+  ONLINE
   UPI
   CARD
   NETBANKING
@@ -42,9 +47,12 @@ enum PaymentMethod {
   COD
 }
 
+/// Which gateway a payment/webhook belongs to. New gateway = new value + adapter class.
 enum PaymentGateway {
   RAZORPAY
   COD
+  /// Dev-only simulated gateway (refused in production).
+  MOCK
 }
 
 enum RefundStatus {
@@ -171,15 +179,17 @@ model Refund {
   @@map("refunds")
 }
 
-/// Every webhook Razorpay sends, stored verbatim before processing.
+/// Every gateway webhook, stored verbatim before processing.
 ///
-/// Razorpay retries webhooks, and retries can arrive out of order or in parallel. The
+/// Gateways retry webhooks, and retries can arrive out of order or in parallel. The
 /// unique `gatewayEventId` turns "process this webhook" into an insert that either
 /// succeeds once or conflicts - which is the whole idempotency mechanism.
 model WebhookEvent {
   id String @id @default(uuid()) @db.Uuid
 
-  gatewayEventId String @unique @db.VarChar(120)
+  /// Which gateway sent it - its adapter verifies and interprets the payload.
+  gateway        PaymentGateway @default(RAZORPAY)
+  gatewayEventId String @db.VarChar(120)
   eventType      String @db.VarChar(80)
 
   /// The exact bytes received, kept because the HMAC is over the raw body.
@@ -194,6 +204,8 @@ model WebhookEvent {
 
   createdAt DateTime @default(now())
 
+  /// Event ids are only unique within one gateway.
+  @@unique([gateway, gatewayEventId])
   @@index([processed, createdAt])
   @@index([eventType, createdAt])
   @@map("webhook_events")

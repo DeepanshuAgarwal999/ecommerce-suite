@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { catalogApi } from '@/features/catalog/api/catalog-api';
 import { isApiError } from '@/lib/api/errors';
 import { ProductDetail } from '@/features/catalog/components/product-detail';
+import { ProductReviews } from '@/features/catalog/components/product-reviews';
 import { TrackProductView } from '@/features/analytics/components/track-product-view';
 import { ProductRecommendations } from '@/features/recommendations/components/product-recommendations';
 
@@ -35,6 +36,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
   return (
     <>
       <ProductDetail product={product} />
+      <ProductReviews
+        productId={product.id}
+        ratingAverage={product.rating}
+        ratingCount={product.ratingCount}
+      />
       {/* Personal, so fetched in the browser - the page itself stays cached and shared. */}
       <ProductRecommendations product={product} />
       <TrackProductView productId={product.id} />

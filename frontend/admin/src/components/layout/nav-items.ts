@@ -5,6 +5,7 @@ import {
   Package,
   Settings,
   ShoppingCart,
+  Star,
   Store,
   Warehouse,
   type LucideIcon,
@@ -25,6 +26,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Products', href: '/products', icon: Package, matchPrefix: true },
   { label: 'Inventory', href: '/inventory', icon: Warehouse, matchPrefix: true },
   { label: 'Orders', href: '/orders', icon: ShoppingCart, matchPrefix: true },
+  { label: 'Reviews', href: '/reviews', icon: Star },
   { label: 'Storefront', href: '/storefront', icon: GalleryHorizontal, matchPrefix: true },
   { label: 'Settings', href: '/settings', icon: Settings },
 ];

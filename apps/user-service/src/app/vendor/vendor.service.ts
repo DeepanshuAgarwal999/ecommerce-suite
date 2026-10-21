@@ -181,6 +181,16 @@ export class VendorService {
     return vendor;
   }
 
+  /** Vendors by (case-insensitive) vendor code - for bulk product import. */
+  async getByCodes(codes: string[]) {
+    const wanted = [...new Set(codes.map((code) => code.trim().toUpperCase()))].slice(0, 200);
+    if (!wanted.length) return [];
+    return this.prisma.vendor.findMany({
+      where: { vendorCode: { in: wanted, mode: 'insensitive' } },
+      select: { id: true, businessName: true, vendorCode: true, status: true },
+    });
+  }
+
   async list(query: { page?: number; limit?: number; status?: VendorStatus; q?: string }) {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(100, Math.max(1, query.limit ?? 20));

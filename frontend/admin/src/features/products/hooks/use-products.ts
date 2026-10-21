@@ -114,3 +114,44 @@ export function useReviewProduct(productId: string) {
     },
   });
 }
+
+/** Pending reviews queue for the moderation screen. */
+export function usePendingReviews(query: { page?: number; limit?: number; productId?: string }) {
+  return useQuery({
+    queryKey: ['reviews', 'pending', query],
+    queryFn: () => productsApi.pendingReviews(query),
+    placeholderData: (previous) => previous,
+  });
+}
+
+/** Approve publishes the review and folds its stars into the product average. */
+export function useApproveReview() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (reviewId: string) => productsApi.approveReview(reviewId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reviews'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.products.all });
+      toast.success('Review published.');
+    },
+    onError: (error) => {
+      toast.error(isApiError(error) ? error.message : 'Could not approve the review.');
+    },
+  });
+}
+
+/** Reject unpublishes the review and removes its stars from the product average. */
+export function useRejectReview() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (reviewId: string) => productsApi.rejectReview(reviewId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reviews'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.products.all });
+      toast.success('Review rejected.');
+    },
+    onError: (error) => {
+      toast.error(isApiError(error) ? error.message : 'Could not reject the review.');
+    },
+  });
+}

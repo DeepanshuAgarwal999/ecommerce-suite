@@ -23,6 +23,7 @@ export const queryKeys = {
     all: ['products'] as const,
     list: (query: Record<string, unknown>) => [...queryKeys.products.all, 'list', query] as const,
     detail: (id: string) => [...queryKeys.products.all, 'detail', id] as const,
+    insights: (id: string, months: number) => [...queryKeys.products.all, 'insights', id, months] as const,
     counts: () => [...queryKeys.products.all, 'counts'] as const,
   },
   inventory: {

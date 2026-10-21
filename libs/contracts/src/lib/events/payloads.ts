@@ -145,6 +145,8 @@ export interface OrderCreatedPayload {
   placedAt: string;
   /** Channel the order was placed from, for attribution. */
   source?: string;
+  /** CART = built from the server cart (which cart-service then empties); DIRECT = explicit items. */
+  basket?: 'CART' | 'DIRECT';
 }
 
 export interface OrderStatusChangedPayload {

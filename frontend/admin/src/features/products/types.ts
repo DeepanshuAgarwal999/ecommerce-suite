@@ -117,6 +117,7 @@ export interface CreateProductInput {
   isReturnable?: boolean;
   returnWindowDays?: number;
   isCodAvailable?: boolean;
+  deliveryPrice?: number;
   submitForReview?: boolean;
   externalSource?: string;
   externalProductId?: string;
@@ -124,13 +125,17 @@ export interface CreateProductInput {
 
 export type UpdateProductInput = Partial<Omit<CreateProductInput, 'vendorId'>>;
 
+export type ProductListSort = 'updated' | 'newest' | 'title' | 'price_asc' | 'price_desc' | 'best_selling' | 'rating';
+
 export interface ProductListQuery {
   page?: number;
   limit?: number;
   q?: string;
-  status?: ProductStatus;
+  /** A status, or ALL to include drafts (omitted = everything except drafts). */
+  status?: ProductStatus | 'ALL';
   vendorId?: string;
   categoryId?: string;
+  sort?: ProductListSort;
 }
 
 export interface ReviewProductInput {

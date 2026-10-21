@@ -3,6 +3,51 @@ import type { Paginated } from '@/types';
 import type { Category, Product, ProductQuery, RawProduct } from '../types';
 import { toProduct } from '../types';
 
+export interface ReviewItem {
+  id: string;
+  userName: string;
+  rating: number;
+  title?: string | null;
+  comment?: string | null;
+  imageUrls: string[];
+  isVerifiedPurchase: boolean;
+  helpfulCount: number;
+  createdAt: string;
+}
+
+export interface ReviewBreakdown {
+  rating: number;
+  count: number;
+}
+
+export interface MyReview {
+  id: string;
+  rating: number;
+  title?: string | null;
+  comment?: string | null;
+  imageUrls: string[];
+  orderId: string | null;
+  isVerifiedPurchase: boolean;
+  isPublished: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReviewableOrder {
+  id: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface CreateReviewInput {
+  productId: string;
+  orderId: string;
+  rating: number;
+  title?: string;
+  comment?: string;
+  imageUrls?: string[];
+}
+
 /**
  * Transport only. These are called from Server Components for the first paint
  * and from React Query hooks for anything interactive. Product responses go
@@ -37,4 +82,22 @@ export const catalogApi = {
     const raw = await api.get<RawProduct>(endpoints.catalog.product(slug), init);
     return toProduct(raw);
   },
+
+  listReviews: (productId: string, query?: { page?: number; limit?: number; rating?: number }) =>
+    api.get<{ items: ReviewItem[]; meta: Paginated<unknown>['meta']; breakdown: ReviewBreakdown[] }>(
+      endpoints.catalog.productReviews(productId),
+      { searchParams: { ...query } },
+    ),
+
+  /** The signed-in buyer's own review for this product, if any (null when none/guest). */
+  myReview: (productId: string) =>
+    api.get<MyReview | null>(endpoints.catalog.myReview(productId)).catch(() => null),
+
+  /** Delivered orders of the buyer that contain this product - the rating shortlist. */
+  reviewableOrders: (productId: string) =>
+    api.get<{ items: ReviewableOrder[] }>(endpoints.catalog.reviewableOrders(productId)),
+
+  /** Write or update my review. Requires a delivered orderId the backend verifies. */
+  createReview: (input: CreateReviewInput) => api.post<MyReview>(endpoints.catalog.reviews, input),
 };
+

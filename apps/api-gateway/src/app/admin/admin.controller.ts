@@ -32,6 +32,7 @@ import {
   CreateCategoryDto,
   CreateProductDto,
   CreateRefundDto,
+  CreateReviewApprovalDto,
   CreateWarehouseDto,
   InventoryPatterns,
   NotificationPatterns,
@@ -250,6 +251,45 @@ export class AdminController {
     @Ctx() ctx: RequestContext,
   ) {
     return this.gateway.catalog(CatalogPatterns.REVIEW_PRODUCT, { productId, dto, ctx });
+  }
+
+  @Get('reviews/pending')
+  @RequirePermissions(Permission.CATALOG_READ)
+  @ApiOperation({ summary: 'Pending (unpublished) reviews awaiting moderation' })
+  pendingReviews(@Query() query: PaginationQueryDto, @Query('productId') productId?: string) {
+    return this.gateway.catalog(CatalogPatterns.LIST_PENDING_REVIEWS, {
+      page: query.page,
+      limit: query.limit,
+      productId,
+    });
+  }
+
+  @Post('reviews/:reviewId/approve')
+  @RequirePermissions(Permission.CATALOG_PUBLISH)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Approve a product review (publishes it and updates the product rating)' })
+  approveReview(
+    @Param('reviewId', ParseUUIDPipe) reviewId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.gateway.catalog(CatalogPatterns.APPROVE_REVIEW, {
+      reviewId,
+      user: { id: user.userId, name: user.email ?? user.mobile },
+    });
+  }
+
+  @Post('reviews/:reviewId/reject')
+  @RequirePermissions(Permission.CATALOG_PUBLISH)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reject a product review (unpublishes it and updates the product rating)' })
+  rejectReview(
+    @Param('reviewId', ParseUUIDPipe) reviewId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.gateway.catalog(CatalogPatterns.REJECT_REVIEW, {
+      reviewId,
+      user: { id: user.userId, name: user.email ?? user.mobile },
+    });
   }
 
   // --- inventory -------------------------------------------------------------

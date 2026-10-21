@@ -37,6 +37,8 @@ export interface Product {
   inStock: boolean;
   /** Per-order cap the inventory service enforces; the stepper honours it. */
   maxPerOrder: number;
+  /** The variant a shopper buys from this listing (default variant) - sent at checkout. */
+  variantId?: string;
   categorySlug: string;
   tags: string[];
   /** Delivery promise for the active pincode, when known: "Tue, 16 Sep". */
@@ -58,7 +60,7 @@ export interface RawProduct {
   ratingCount: number;
   vendorName: string;
   media: { url: string; altText?: string | null }[];
-  variants: { title?: string; price: number; mrp: number; isDefault?: boolean }[];
+  variants: { id?: string; title?: string; price: number; mrp: number; isDefault?: boolean }[];
   category?: { slug: string } | null;
 }
 
@@ -75,6 +77,7 @@ export function toProduct(raw: RawProduct): Product {
     brand: raw.vendorName,
     description: raw.description ?? '',
     images: raw.media.map((media) => ({ url: media.url, alt: media.altText || raw.title })),
+    variantId: variant?.id,
     pricePaise: variant?.price ?? raw.minPrice,
     mrpPaise: variant?.mrp ?? raw.maxPrice,
     variantLabel: raw.variants.length > 1 ? variant?.title : undefined,

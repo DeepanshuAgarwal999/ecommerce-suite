@@ -257,7 +257,7 @@ model Review {
   imageUrls String[]
 
   helpfulCount Int @default(0)
-  isPublished  Boolean @default(true)
+  isPublished  Boolean @default(false)
   /// Flagged reviews are hidden pending moderation rather than deleted.
   flagCount    Int     @default(0)
 

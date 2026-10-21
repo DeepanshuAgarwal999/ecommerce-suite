@@ -76,6 +76,11 @@ export class CatalogController {
     return this.products.categoryCards(msg.categoryIds ?? []);
   }
 
+  @MessagePattern(CatalogPatterns.FIND_BY_EXTERNAL_IDS)
+  findByExternalIds(@Payload() msg: { source: string; externalIds: string[] }) {
+    return this.products.findByExternalIds(msg.source, msg.externalIds ?? []);
+  }
+
   @MessagePattern(CatalogPatterns.PRODUCT_INDEX)
   productIndex(@Payload() msg: { page: number; limit: number }) {
     return this.products.index(msg.page, msg.limit);
@@ -99,8 +104,8 @@ export class CatalogController {
   }
 
   @MessagePattern(CatalogPatterns.RESOLVE_VARIANTS)
-  resolveVariants(@Payload() msg: { variantIds: string[] }) {
-    return this.products.resolveVariants(msg.variantIds);
+  resolveVariants(@Payload() msg: { variantIds: string[]; productIds?: string[] }) {
+    return this.products.resolveVariants(msg.variantIds ?? [], msg.productIds ?? []);
   }
 
   @MessagePattern(CatalogPatterns.ADMIN_SEARCH_PRODUCTS)
@@ -110,9 +115,10 @@ export class CatalogController {
       page?: number;
       limit?: number;
       q?: string;
-      status?: ProductStatus;
+      status?: ProductStatus | 'ALL';
       vendorId?: string;
       categoryId?: string;
+      sort?: string;
     },
   ) {
     return this.products.adminSearch(msg);
@@ -169,9 +175,18 @@ export class CatalogController {
 
   @MessagePattern(CatalogPatterns.CREATE_REVIEW)
   createReview(
-    @Payload() msg: { user: { id: string; name: string }; dto: CreateReviewDto; ctx: RequestContext },
+    @Payload()
+    msg: {
+      user: { id: string; name: string };
+      dto: CreateReviewDto;
+      ctx: RequestContext;
+      verified?: { orderId: string; isVerifiedPurchase: boolean };
+    },
   ) {
-    return this.reviews.create(msg.user, msg.dto, msg.ctx);
+    return this.reviews.create(msg.user, msg.dto, msg.ctx, {
+      orderId: msg.verified?.orderId ?? msg.dto.orderId ?? '',
+      isVerifiedPurchase: msg.verified?.isVerifiedPurchase === true,
+    });
   }
 
   @MessagePattern(CatalogPatterns.LIST_REVIEWS)
@@ -179,5 +194,31 @@ export class CatalogController {
     @Payload() msg: { productId: string; page?: number; limit?: number; rating?: number },
   ) {
     return this.reviews.list(msg.productId, msg);
+  }
+
+  @MessagePattern(CatalogPatterns.LIST_PENDING_REVIEWS)
+  listPendingReviews(
+    @Payload() msg: { page?: number; limit?: number; productId?: string },
+  ) {
+    return this.reviews.listPending(msg ?? {});
+  }
+
+  @MessagePattern(CatalogPatterns.GET_MY_REVIEW)
+  getMyReview(@Payload() msg: { productId: string; userId: string }) {
+    return this.reviews.getMyReview(msg.productId, msg.userId);
+  }
+
+  @MessagePattern(CatalogPatterns.APPROVE_REVIEW)
+  approveReview(
+    @Payload() msg: { reviewId: string; user: { id: string; name: string } },
+  ) {
+    return this.reviews.approveReview(msg.user, msg.reviewId);
+  }
+
+  @MessagePattern(CatalogPatterns.REJECT_REVIEW)
+  rejectReview(
+    @Payload() msg: { reviewId: string; user: { id: string; name: string } },
+  ) {
+    return this.reviews.rejectReview(msg.user, msg.reviewId);
   }
 }

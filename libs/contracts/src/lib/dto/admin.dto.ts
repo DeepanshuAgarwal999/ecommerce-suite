@@ -75,11 +75,20 @@ export class AdminOrdersQueryDto extends AdminListQueryDto {
   to?: string;
 }
 
+export const PRODUCT_LIST_SORTS = ['updated', 'newest', 'title', 'price_asc', 'price_desc', 'best_selling', 'rating'] as const;
+export type ProductListSort = (typeof PRODUCT_LIST_SORTS)[number];
+
 export class VendorProductsQueryDto extends AdminListQueryDto {
-  @ApiPropertyOptional({ enum: ProductStatus })
-  @IsIn(Object.values(ProductStatus))
+  /** A status, or ALL to include drafts too (omitted = every status except DRAFT). */
+  @ApiPropertyOptional({ enum: [...Object.values(ProductStatus), 'ALL'] })
+  @IsIn([...Object.values(ProductStatus), 'ALL'])
   @IsOptional()
-  status?: ProductStatus;
+  status?: ProductStatus | 'ALL';
+
+  @ApiPropertyOptional({ enum: PRODUCT_LIST_SORTS, default: 'updated' })
+  @IsIn(PRODUCT_LIST_SORTS)
+  @IsOptional()
+  sort?: ProductListSort;
 }
 
 /** Cross-vendor, cross-warehouse stock browser for the admin inventory console. */

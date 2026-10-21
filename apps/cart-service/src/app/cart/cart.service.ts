@@ -228,9 +228,16 @@ export class CartService {
    */
   async checkoutSnapshot(
     userId: string,
-    input: { addressId: string; pincode?: string; paymentMethod: string },
+    input: {
+      addressId: string;
+      pincode?: string;
+      paymentMethod: string;
+      items?: { productId: string; variantId?: string; quantity: number }[];
+    },
     ctx: RequestContext,
   ) {
+    if (input.items?.length) return this.directSnapshot(input.items, input, ctx);
+
     const cart = await this.loadOrCreate(userId);
     const items = await this.prisma.cartItem.findMany({ where: { cartId: cart.id } });
 
@@ -347,6 +354,112 @@ export class CartService {
       couponCode: cart.couponCode,
       lines,
       totals,
+      basket: 'CART' as const,
+      correlationId: ctx.correlationId,
+    };
+  }
+
+  /**
+   * Prices explicit lines ("Buy now", or a client-held cart) with the same rules as the
+   * server cart - live catalog price, active products only, stock check, shared
+   * totals - but never reads, locks or empties the stored cart. Prices come from the
+   * catalog here, not the client, so there is no "price changed" step: what the shopper
+   * confirms on the next screen is what this computed.
+   */
+  private async directSnapshot(
+    items: { productId: string; variantId?: string; quantity: number }[],
+    input: { pincode?: string; paymentMethod: string },
+    ctx: RequestContext,
+  ) {
+    const variants = await rpc<ResolvedVariant[]>(
+      this.catalog,
+      CatalogPatterns.RESOLVE_VARIANTS,
+      {
+        variantIds: items.flatMap((item) => (item.variantId ? [item.variantId] : [])),
+        productIds: items.flatMap((item) => (item.variantId ? [] : [item.productId])),
+      },
+      { timeoutMs: this.rpcTimeout, service: 'catalog-service' },
+    );
+
+    // Same variant requested twice (e.g. two rows of one product) -> one line.
+    const merged = new Map<string, { variant: ResolvedVariant; quantity: number }>();
+    const unavailable: string[] = [];
+    for (const item of items) {
+      const variant = item.variantId
+        ? variants.find((row) => row.id === item.variantId && row.product.id === item.productId)
+        : variants.find((row) => row.product.id === item.productId);
+      if (!variant || variant.product.status !== 'ACTIVE') {
+        unavailable.push(item.productId);
+        continue;
+      }
+      const existing = merged.get(variant.id);
+      merged.set(variant.id, { variant, quantity: (existing?.quantity ?? 0) + item.quantity });
+    }
+    if (unavailable.length > 0) {
+      throw new AppException(
+        ErrorCode.PRODUCT_UNAVAILABLE,
+        'Some items are no longer available',
+        HttpStatus.CONFLICT,
+        { details: { unavailable } },
+      );
+    }
+    if (input.paymentMethod === 'COD') {
+      const noCod = [...merged.values()].filter(({ variant }) => !variant.product.isCodAvailable);
+      if (noCod.length) {
+        throw new AppException(
+          ErrorCode.VALIDATION_FAILED,
+          'Cash on delivery is not available for some items',
+          HttpStatus.BAD_REQUEST,
+          { details: { skus: noCod.map(({ variant }) => variant.sku) } },
+        );
+      }
+    }
+
+    const availability = await this.checkAvailability([...merged.values()].map(({ variant }) => variant.sku), input.pincode);
+    const short = [...merged.values()].filter(({ variant, quantity }) => {
+      const view = availability.find((entry) => entry.sku === variant.sku);
+      return !view || view.available < quantity;
+    });
+    if (short.length > 0) {
+      throw new AppException(ErrorCode.INSUFFICIENT_STOCK, 'Some items do not have enough stock', HttpStatus.CONFLICT, {
+        details: {
+          unavailable: short.map(({ variant, quantity }) => ({
+            sku: variant.sku,
+            requested: quantity,
+            available: availability.find((entry) => entry.sku === variant.sku)?.available ?? 0,
+          })),
+        },
+      });
+    }
+
+    const lines = [...merged.values()].map(({ variant, quantity }) => ({
+      productId: variant.product.id,
+      variantId: variant.id,
+      sku: variant.sku,
+      vendorId: variant.product.vendorId,
+      vendorName: variant.product.vendorName,
+      title: variant.product.title + (variant.title && variant.title !== 'Default' ? ` - ${variant.title}` : ''),
+      imageUrl: variant.imageUrl ?? variant.product.media[0]?.url ?? null,
+      options: variant.options,
+      quantity,
+      unitPrice: variant.price,
+      unitMrp: variant.mrp,
+      taxBps: variant.product.taxBps,
+      lineTotal: variant.price * quantity,
+    }));
+
+    const totals = this.priceCart(
+      lines.map((line) => ({ lineTotal: line.lineTotal, taxBps: line.taxBps })),
+      0,
+      input.paymentMethod === 'COD',
+    );
+
+    return {
+      cartId: null,
+      couponCode: null,
+      lines,
+      totals,
+      basket: 'DIRECT' as const,
       correlationId: ctx.correlationId,
     };
   }

@@ -1,7 +1,6 @@
 'use client';
 
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
+import { ProceedToCheckoutButton } from '@/features/checkout/components/proceed-to-checkout-button';
 import { Separator } from '@/components/ui/separator';
 import { formatPrice } from '@/lib/utils/format';
 import { amountToFreeDelivery } from '../totals';
@@ -48,9 +47,7 @@ export function CartSummary({ totals }: { totals: CartTotals }) {
         </div>
       </dl>
 
-      <Button asChild size="lg" className="h-12 text-[15px] font-extrabold">
-        <Link href="/checkout">Proceed to checkout</Link>
-      </Button>
+      <ProceedToCheckoutButton />
     </aside>
   );
 }

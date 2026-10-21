@@ -6,6 +6,7 @@ import {
   AuthenticatedUser,
   CancelOrderDto,
   CreateOrderDto,
+  QuoteOrderDto,
   Headers,
   OrderPatterns,
   OrderStatus,
@@ -29,6 +30,14 @@ export class OrdersController {
    * connection: the same key returns the same order, never a second one. Clients should
    * generate a UUID per checkout attempt and reuse it on retry.
    */
+  @Post('quote')
+  @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 60, windowSeconds: 60, scope: 'order-quote' })
+  @ApiOperation({ summary: 'Exact price (incl. delivery, tax, COD fee) for items - creates nothing' })
+  quote(@Body() dto: QuoteOrderDto, @Ctx() ctx: RequestContext) {
+    return this.gateway.order(OrderPatterns.QUOTE, { dto, ctx });
+  }
+
   @Post()
   @RateLimit({ limit: 10, windowSeconds: 60, scope: 'order-create' })
   @ApiHeader({ name: Headers.IDEMPOTENCY_KEY, required: false, description: 'UUID per checkout attempt' })

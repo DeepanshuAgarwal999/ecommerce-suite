@@ -52,7 +52,14 @@ export class KafkaConsumerService implements OnApplicationShutdown {
 
     await consumer.connect();
     for (const topic of registration.topics) {
-      await consumer.subscribe({ topic, fromBeginning: registration.fromBeginning ?? false });
+      // `fromBeginning` only matters for a partition this group has never committed an
+      // offset on. Defaulting it to false ("start at latest") silently DROPPED any event
+      // produced to such a partition before the group first read it - e.g. the first
+      // stock-reservation request landing on one of 24 partitions right after a deploy,
+      // leaving that order unreserved forever. Earliest is the safe default for an
+      // event-driven system: committed groups still resume exactly where they were, and
+      // every handler here is idempotent (processed-event dedupe), so a replay is harmless.
+      await consumer.subscribe({ topic, fromBeginning: registration.fromBeginning ?? true });
     }
 
     const maxRetries = registration.maxRetries ?? this.options.consumer?.retries ?? 3;

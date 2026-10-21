@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { FulfilmentType, OrderStatus, PaymentMethod } from '../enums';
+import { CheckoutItemDto } from './cart.dto';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -17,10 +18,49 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+/**
+ * "What exactly will I pay?" for explicit items - computed by the same pricing path as
+ * order creation (live catalog price, shipping, tax, COD fee), but side-effect free:
+ * no order, no stock hold, no cart lock. The checkout's Pay button shows this number.
+ */
+export class QuoteOrderDto {
+  @ApiProperty({ enum: PaymentMethod })
+  @IsIn(Object.values(PaymentMethod))
+  paymentMethod!: PaymentMethod;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @Matches(/^\d{6}$/)
+  @IsOptional()
+  pincode?: string;
+
+  @ApiProperty({ type: [CheckoutItemDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => CheckoutItemDto)
+  items!: CheckoutItemDto[];
+}
+
 export class CreateOrderDto {
   @ApiProperty()
   @IsUUID()
   addressId!: string;
+
+  /**
+   * What to buy. Omitted = the shopper's server-side cart (mobile apps). Present =
+   * exactly these lines ("Buy now", or the web storefront's browser-held cart) - the
+   * server cart is left untouched either way.
+   */
+  @ApiPropertyOptional({ type: [CheckoutItemDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => CheckoutItemDto)
+  @IsOptional()
+  items?: CheckoutItemDto[];
 
   @ApiProperty({ enum: PaymentMethod })
   @IsIn(Object.values(PaymentMethod))

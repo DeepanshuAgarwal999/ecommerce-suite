@@ -4,6 +4,8 @@ import type { PackSize, Product } from '@/features/catalog/types';
  *  the catalog, and so a price change mid-session is visible on the next sync. */
 export interface CartLine {
   productId: string;
+  /** Older persisted lines may lack it - the server then uses the default variant. */
+  variantId?: string;
   slug: string;
   name: string;
   imageUrl: string;
@@ -27,6 +29,7 @@ export interface CartTotals {
 export function toCartLine(product: Product, quantity: number): CartLine {
   return {
     productId: product.id,
+    variantId: product.variantId,
     slug: product.slug,
     name: product.name,
     imageUrl: product.images[0]?.url ?? '',

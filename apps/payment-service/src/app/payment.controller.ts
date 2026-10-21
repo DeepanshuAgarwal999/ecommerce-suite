@@ -1,14 +1,11 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { PaymentPatterns, RequestContext } from '@ecommerce/contracts';
-import { CreateRefundDto, VerifyCheckoutDto } from '@ecommerce/contracts';
+import { ConfirmPaymentDto, CreateRefundDto } from '@ecommerce/contracts';
 import { PaymentService } from './payment/payment.service';
+import { PaymentProviderRegistry } from './providers/payment-provider.registry';
 import { RefundService } from './refund/refund.service';
 import { WebhookService } from './webhook/webhook.service';
-
-/** Pattern for the gateway to forward Razorpay webhooks. Kept off the public contract
- *  list because only the gateway's webhook route should ever send it. */
-export const WEBHOOK_PATTERN = 'payment.webhook.razorpay';
 
 @Controller()
 export class PaymentController {
@@ -16,7 +13,13 @@ export class PaymentController {
     private readonly payments: PaymentService,
     private readonly refunds: RefundService,
     private readonly webhooks: WebhookService,
+    private readonly providers: PaymentProviderRegistry,
   ) {}
+
+  @MessagePattern(PaymentPatterns.ACTIVE_PROVIDER)
+  activeProvider() {
+    return { provider: this.providers.active().name };
+  }
 
   @MessagePattern(PaymentPatterns.CREATE_CHECKOUT)
   createCheckout(
@@ -26,9 +29,9 @@ export class PaymentController {
     return this.payments.createCheckout(msg.userId, msg.orderId, msg.idempotencyKey, msg.ctx);
   }
 
-  @MessagePattern(PaymentPatterns.VERIFY_SIGNATURE)
-  verify(@Payload() msg: { userId: string; dto: VerifyCheckoutDto; ctx: RequestContext }) {
-    return this.payments.verifyCheckout(msg.userId, msg.dto, msg.ctx);
+  @MessagePattern(PaymentPatterns.CONFIRM)
+  confirm(@Payload() msg: { userId: string; dto: ConfirmPaymentDto; ctx: RequestContext }) {
+    return this.payments.confirm(msg.userId, msg.dto, msg.ctx);
   }
 
   @MessagePattern(PaymentPatterns.GET_PAYMENT)
@@ -64,8 +67,9 @@ export class PaymentController {
     return this.refunds.list(msg);
   }
 
-  @MessagePattern(WEBHOOK_PATTERN)
-  webhook(@Payload() msg: { rawBody: string; signature: string; eventId: string }) {
+  /** Any gateway's webhook, forwarded raw by api-gateway's /payments/webhooks/:provider. */
+  @MessagePattern(PaymentPatterns.WEBHOOK)
+  webhook(@Payload() msg: { provider: string; rawBody: string; headers: Record<string, string | undefined> }) {
     return this.webhooks.ingest(msg);
   }
 }

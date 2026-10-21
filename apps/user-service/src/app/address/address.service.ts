@@ -13,6 +13,19 @@ import { CreateAddressDto, UpdateAddressDto } from '@ecommerce/contracts';
  * pointing at nothing. The order itself also stores a frozen copy, so this is belt and
  * braces - but the copy is what makes the soft delete safe to reason about.
  */
+/** Optional text field from a form: undefined = leave as is, blank = clear it. */
+function optional(value: string | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+/** The custom name only means something for OTHER; HOME/WORK never carry one. */
+function labelNameFor(label: string | undefined, labelName: string | undefined) {
+  if (label === undefined) return optional(labelName);
+  return label === 'OTHER' ? (optional(labelName) ?? null) : null;
+}
+
 @Injectable()
 export class AddressService {
   constructor(
@@ -58,12 +71,13 @@ export class AddressService {
         data: {
           userId,
           label: dto.label,
+          labelName: labelNameFor(dto.label, dto.labelName),
           fullName: dto.fullName,
           phone: dto.phone,
-          alternatePhone: dto.alternatePhone,
+          alternatePhone: optional(dto.alternatePhone),
           line1: dto.line1,
-          line2: dto.line2,
-          landmark: dto.landmark,
+          line2: optional(dto.line2),
+          landmark: optional(dto.landmark),
           city: dto.city,
           state: dto.state,
           pincode: dto.pincode,
@@ -94,12 +108,13 @@ export class AddressService {
         where: { id: addressId },
         data: {
           label: dto.label,
+          labelName: labelNameFor(dto.label, dto.labelName),
           fullName: dto.fullName,
           phone: dto.phone,
-          alternatePhone: dto.alternatePhone,
+          alternatePhone: optional(dto.alternatePhone),
           line1: dto.line1,
-          line2: dto.line2,
-          landmark: dto.landmark,
+          line2: optional(dto.line2),
+          landmark: optional(dto.landmark),
           city: dto.city,
           state: dto.state,
           pincode: dto.pincode,

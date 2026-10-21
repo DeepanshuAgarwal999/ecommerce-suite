@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  Headers as HttpHeaders,
   HttpCode,
   HttpStatus,
   Logger,
@@ -18,18 +17,17 @@ import { AppException, Ctx, IdempotencyKey, PaginationQueryDto, RawResponse } fr
 import {
   AuthenticatedUser,
   CreateCheckoutDto,
+  ConfirmPaymentDto,
   Headers,
   PaymentPatterns,
   RequestContext,
-  VerifyCheckoutDto,
 } from '@ecommerce/contracts';
 import type { Request } from 'express';
-import { createHash } from 'node:crypto';
 import { GatewayService } from '../common/gateway.service';
 import { RateLimit, SkipRateLimit } from '../common/rate-limit.guard';
 
-/** Mirrors the constant in payment-service; kept out of the public pattern list. */
-const WEBHOOK_PATTERN = 'payment.webhook.razorpay';
+/** Headers never forwarded with a webhook - the gateway adapters only need the gateway's own. */
+const DROP_HEADERS = new Set(['authorization', 'cookie', 'x-access-token']);
 
 @ApiTags('payments')
 @Controller('payments')
@@ -38,11 +36,18 @@ export class PaymentsController {
 
   constructor(private readonly gateway: GatewayService) {}
 
+  @Public()
+  @Get('config')
+  @ApiOperation({ summary: 'The active payment gateway (clients preload its SDK)' })
+  config() {
+    return this.gateway.payment(PaymentPatterns.ACTIVE_PROVIDER, {});
+  }
+
   @Post('checkout')
   @ApiBearerAuth('access-token')
   @RateLimit({ limit: 10, windowSeconds: 60, scope: 'payment-checkout' })
   @ApiHeader({ name: Headers.IDEMPOTENCY_KEY, required: false })
-  @ApiOperation({ summary: 'Start a Razorpay payment for an order' })
+  @ApiOperation({ summary: 'Start (or resume) an online payment for an order on the active gateway' })
   createCheckout(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateCheckoutDto,
@@ -57,16 +62,17 @@ export class PaymentsController {
     });
   }
 
-  @Post('verify')
+  @Post('confirm')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Verify the signature returned by the Razorpay SDK' })
-  verify(
+  @RateLimit({ limit: 20, windowSeconds: 60, scope: 'payment-confirm' })
+  @ApiOperation({ summary: "Report the gateway checkout widget's result; verified by that gateway's adapter" })
+  confirm(
     @CurrentUser() user: AuthenticatedUser,
-    @Body() dto: VerifyCheckoutDto,
+    @Body() dto: ConfirmPaymentDto,
     @Ctx() ctx: RequestContext,
   ) {
-    return this.gateway.payment(PaymentPatterns.VERIFY_SIGNATURE, { userId: user.userId, dto, ctx });
+    return this.gateway.payment(PaymentPatterns.CONFIRM, { userId: user.userId, dto, ctx });
   }
 
   @Get()
@@ -88,47 +94,41 @@ export class PaymentsController {
   }
 
   /**
-   * Razorpay webhook.
+   * Webhooks from any gateway: POST /payments/webhooks/razorpay (configure exactly this
+   * URL in the Razorpay dashboard), /payments/webhooks/<next-gateway>, ...
    *
-   * Public (Razorpay has no bearer token), exempt from rate limiting (a burst of
-   * webhooks during a sale is normal), and forwarded with the *raw* body so the HMAC
-   * can be verified downstream against the exact bytes received.
+   * Public (gateways send no bearer token), exempt from rate limiting (a burst during
+   * a sale is normal), and forwarded with the *raw* body and headers so the gateway's
+   * adapter can verify its signature over the exact bytes received.
    *
-   * Always returns 200 once the event is durably stored. Returning an error makes
-   * Razorpay retry, which is only useful if we failed to *store* it - processing
-   * failures are retried from our own table instead.
+   * 200 once durably stored. A non-2xx makes the gateway retry, which is only useful if
+   * we failed to *store* it - processing failures are retried from our own table.
    */
   @Public()
   @SkipRateLimit()
   @RawResponse()
   @ApiExcludeEndpoint()
-  @Post('webhooks/razorpay')
+  @Post('webhooks/:provider')
   @HttpCode(HttpStatus.OK)
-  async razorpayWebhook(
-    @Req() request: Request & { rawBody?: Buffer },
-    @HttpHeaders('x-razorpay-signature') signature: string | undefined,
-    @HttpHeaders('x-razorpay-event-id') eventId: string | undefined,
-  ) {
-    if (!request.rawBody || !signature) {
-      throw AppException.validation('Missing webhook body or signature');
+  async webhook(@Param('provider') provider: string, @Req() request: Request & { rawBody?: Buffer }) {
+    if (!request.rawBody) throw AppException.validation('Missing webhook body');
+
+    const headers: Record<string, string | undefined> = {};
+    for (const [name, value] of Object.entries(request.headers)) {
+      if (!DROP_HEADERS.has(name)) headers[name] = Array.isArray(value) ? value.join(',') : value;
     }
 
-    const result = await this.gateway.payment<{ accepted: boolean; duplicate: boolean }>(
-      WEBHOOK_PATTERN,
-      {
-        rawBody: request.rawBody.toString('utf8'),
-        signature,
-        // Razorpay sends an event id; fall back to a body hash so older payloads still dedupe.
-        eventId: eventId ?? `sha256:${createHash('sha256').update(request.rawBody).digest('hex')}`,
-      },
-    );
+    const result = await this.gateway.payment<{ accepted: boolean; duplicate: boolean }>(PaymentPatterns.WEBHOOK, {
+      provider,
+      rawBody: request.rawBody.toString('utf8'),
+      headers,
+    });
 
     if (!result.accepted) {
-      this.logger.warn('rejected a Razorpay webhook (bad signature or malformed body)');
-      // 400 stops Razorpay retrying a payload that will never verify.
+      this.logger.warn(`rejected a ${provider} webhook (unknown gateway, bad signature or malformed body)`);
+      // 400 stops the gateway retrying a payload that will never verify.
       throw AppException.validation('Webhook rejected');
     }
-
     return { status: 'ok', duplicate: result.duplicate };
   }
 }

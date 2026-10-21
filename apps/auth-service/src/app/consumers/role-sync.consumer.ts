@@ -59,7 +59,13 @@ export class RoleSyncConsumer implements OnApplicationBootstrap {
       this.logger.debug(`skipping duplicate event ${envelope.eventId}`);
       return;
     }
-    await this.onVendorStatusChanged(envelope.payload);
+    try {
+      await this.onVendorStatusChanged(envelope.payload);
+    } catch (error) {
+      // Let the retry / redelivery actually re-run it (see IdempotencyService.releaseEvent).
+      await this.idempotency.releaseEvent(ConsumerGroups.AUTH_ROLE_SYNC, envelope.eventId);
+      throw error;
+    }
   }
 
   private async onVendorStatusChanged(payload: VendorLifecyclePayload): Promise<void> {

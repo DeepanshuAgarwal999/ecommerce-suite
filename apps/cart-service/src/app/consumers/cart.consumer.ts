@@ -52,7 +52,9 @@ export class CartConsumer implements OnApplicationBootstrap {
   }
 
   private async onOrderCreated(envelope: EventEnvelope<OrderCreatedPayload>): Promise<void> {
-    const { userId, orderId } = envelope.payload;
+    const { userId, orderId, basket } = envelope.payload;
+    // A DIRECT order ("Buy now", browser cart) never came from the server cart - leave it alone.
+    if (basket === 'DIRECT') return;
     await this.carts.markConverted(userId, orderId, {
       correlationId: envelope.correlationId ?? randomUUID(),
       userId,
@@ -77,9 +79,15 @@ export class CartConsumer implements OnApplicationBootstrap {
     });
     if (applied) return;
 
-    await handler();
-    await this.prisma.processedEvent.create({
-      data: { eventId: envelope.eventId, consumerGroup: group },
-    });
+    try {
+      await handler();
+      await this.prisma.processedEvent.create({
+        data: { eventId: envelope.eventId, consumerGroup: group },
+      });
+    } catch (error) {
+      // Let the retry / redelivery actually re-run it (see IdempotencyService.releaseEvent).
+      await this.idempotency.releaseEvent(group, envelope.eventId);
+      throw error;
+    }
   }
 }

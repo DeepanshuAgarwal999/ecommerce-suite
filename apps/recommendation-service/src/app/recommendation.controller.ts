@@ -4,6 +4,7 @@ import { RecommendationPatterns } from '@ecommerce/contracts';
 import { FatigueService } from './engine/fatigue.service';
 import { IdentityService, type Actor } from './engine/identity.service';
 import { IngestService } from './engine/ingest.service';
+import { ProductActivityService } from './serving/product-activity.service';
 import { RecommendationService } from './serving/recommendation.service';
 
 /** What the gateway emits for each storefront activity beacon. */
@@ -26,6 +27,7 @@ export class RecommendationController {
     private readonly ingest: IngestService,
     private readonly fatigue: FatigueService,
     private readonly recs: RecommendationService,
+    private readonly productActivityService: ProductActivityService,
   ) {}
 
   /**
@@ -64,6 +66,11 @@ export class RecommendationController {
   @MessagePattern(RecommendationPatterns.FOR_CART)
   forCart(@Payload() msg: Actor & { productIds: string[] }) {
     return this.recs.forCart(msg.productIds ?? [], this.identity.keyFor(msg));
+  }
+
+  @MessagePattern(RecommendationPatterns.PRODUCT_ACTIVITY)
+  productActivity(@Payload() msg: { productId: string; months: number }) {
+    return this.productActivityService.forProduct(msg.productId, msg.months);
   }
 
   @MessagePattern(RecommendationPatterns.FOR_USER)

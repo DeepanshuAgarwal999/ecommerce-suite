@@ -8,11 +8,11 @@ import {
   type OnChangeFn,
   type SortingState,
 } from '@tanstack/react-table';
-import { ChevronLeft, ChevronRight, Inbox } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Inbox } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { PaginationMeta } from '@/types/pagination';
+import { PaginationBar } from './pagination-bar';
 
 interface DataTableProps<T> {
   columns: ColumnDef<T>[];
@@ -20,6 +20,8 @@ interface DataTableProps<T> {
   meta?: PaginationMeta;
   isLoading?: boolean;
   onPageChange?: (page: number) => void;
+  /** Shows a rows-per-page picker when given. */
+  onPageSizeChange?: (size: number) => void;
   onRowClick?: (row: T) => void;
   sorting?: SortingState;
   onSortingChange?: OnChangeFn<SortingState>;
@@ -38,6 +40,7 @@ export function DataTable<T>({
   meta,
   isLoading,
   onPageChange,
+  onPageSizeChange,
   onRowClick,
   sorting,
   onSortingChange,
@@ -109,35 +112,13 @@ export function DataTable<T>({
         </Table>
       </div>
 
-      {meta && meta.totalPages > 1 && (
-        <div className="flex items-center justify-between px-1">
-          <p className="text-xs text-muted-foreground">
-            {meta.total.toLocaleString()} result{meta.total === 1 ? '' : 's'} · page {meta.page} of{' '}
-            {meta.totalPages}
-          </p>
-          <div className="flex items-center gap-1.5">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              disabled={!meta.hasPrevious}
-              onClick={() => onPageChange?.(meta.page - 1)}
-              aria-label="Previous page"
-            >
-              <ChevronLeft className="size-4" aria-hidden />
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              disabled={!meta.hasNext}
-              onClick={() => onPageChange?.(meta.page + 1)}
-              aria-label="Next page"
-            >
-              <ChevronRight className="size-4" aria-hidden />
-            </Button>
-          </div>
-        </div>
+      {meta && onPageChange && (
+        <PaginationBar
+          meta={meta}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          disabled={isLoading}
+        />
       )}
     </div>
   );

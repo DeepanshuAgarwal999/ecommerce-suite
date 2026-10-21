@@ -126,6 +126,19 @@ export const configuration = () => ({
     anonymousLimit: toInt(process.env.THROTTLE_ANON_LIMIT, 30),
   },
 
+  payments: {
+    /**
+     * Gateway new payments go through: razorpay | mock (dev only). Switching gateway is
+     * this env var plus that gateway's credentials - existing payments keep settling
+     * through the gateway that created them.
+     */
+    provider: (process.env.PAYMENT_PROVIDER ?? 'razorpay').toLowerCase(),
+    /** Shown on the gateway's checkout sheet. */
+    merchantName: process.env.PAYMENT_MERCHANT_NAME ?? 'nestora',
+    /** How long a created gateway order stays payable before a fresh one is needed. */
+    checkoutTtlMinutes: toInt(process.env.PAYMENT_CHECKOUT_TTL_MINUTES, 15),
+  },
+
   razorpay: {
     keyId: process.env.RAZORPAY_KEY_ID ?? '',
     keySecret: process.env.RAZORPAY_KEY_SECRET ?? '',

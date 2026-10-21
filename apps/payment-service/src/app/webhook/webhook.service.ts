@@ -1,35 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { RazorpayWebhookEvents } from '@ecommerce/contracts';
 import { Prisma } from '@ecom-db/payment';
-import { PrismaService } from '../prisma/prisma.service';
-import { RazorpayClient, RazorpayPayment, RazorpayRefund } from '../razorpay/razorpay.client';
 import { PaymentService } from '../payment/payment.service';
+import type { PaymentProvider } from '../providers/payment-provider';
+import { PaymentProviderRegistry } from '../providers/payment-provider.registry';
+import { PrismaService } from '../prisma/prisma.service';
 import { RefundService } from '../refund/refund.service';
 
-interface RazorpayWebhookBody {
-  event: string;
-  created_at: number;
-  payload: {
-    payment?: { entity: RazorpayPayment };
-    refund?: { entity: RazorpayRefund };
-    order?: { entity: { id: string } };
-  };
-}
-
 /**
- * Razorpay webhook intake.
+ * Webhook intake for every gateway (/payments/webhooks/:provider).
  *
- * Three properties matter here and each maps to a line of code below:
+ * Three properties, each one line below, none of them gateway-specific:
+ *  - Verified: the gateway's adapter checks the signature over the raw bytes first.
+ *  - Durable: the event is stored before it is processed, so a crash loses nothing.
+ *  - Idempotent: (gateway, eventId) is unique, so a redelivery is an insert conflict.
  *
- *  - Verified: the HMAC is checked against the raw bytes before anything is parsed.
- *  - Durable: the event is written to `WebhookEvent` before it is processed, so a crash
- *    mid-handling loses nothing - the row is retried.
- *  - Idempotent: the unique `gatewayEventId` makes a redelivered webhook an insert
- *    conflict, which we treat as "already handled".
- *
- * Razorpay expects a 2xx quickly; anything slow is retried and anything non-2xx is
- * retried harder. So the handler stores, acknowledges, and does the real work from the
- * stored row.
+ * Gateways want a fast 2xx, so we store, acknowledge and process from the stored row;
+ * processing failures are retried from our table (retryFailed), not by the gateway.
  */
 @Injectable()
 export class WebhookService {
@@ -37,23 +23,25 @@ export class WebhookService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly razorpay: RazorpayClient,
+    private readonly providers: PaymentProviderRegistry,
     private readonly payments: PaymentService,
     private readonly refunds: RefundService,
   ) {}
 
   async ingest(input: {
+    provider: string;
     rawBody: string;
-    signature: string;
-    eventId: string;
+    headers: Record<string, string | undefined>;
   }): Promise<{ accepted: boolean; duplicate: boolean }> {
-    const valid = this.razorpay.verifyWebhookSignature(input.rawBody, input.signature);
+    const provider = this.providers.byName(input.provider);
+    if (!provider) {
+      this.logger.warn(`webhook for unknown gateway "${input.provider}"`);
+      return { accepted: false, duplicate: false };
+    }
 
-    let body: RazorpayWebhookBody;
-    try {
-      body = JSON.parse(input.rawBody) as RazorpayWebhookBody;
-    } catch {
-      this.logger.warn('webhook body is not JSON');
+    const verified = provider.verifyWebhook({ rawBody: input.rawBody, headers: input.headers });
+    if (verified.body === null) {
+      this.logger.warn(`${provider.name} webhook body is not JSON`);
       return { accepted: false, duplicate: false };
     }
 
@@ -61,36 +49,43 @@ export class WebhookService {
     try {
       record = await this.prisma.webhookEvent.create({
         data: {
-          gatewayEventId: input.eventId,
-          eventType: body.event,
-          rawPayload: body as never,
-          signature: input.signature,
-          signatureValid: valid,
+          gateway: provider.gateway,
+          gatewayEventId: verified.eventId,
+          eventType: verified.eventType,
+          rawPayload: verified.body as never,
+          signature: verified.signature.slice(0, 256),
+          signatureValid: verified.valid,
         },
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        this.logger.debug(`duplicate webhook ${input.eventId}`);
         return { accepted: true, duplicate: true };
       }
       throw error;
     }
 
-    if (!valid) {
-      // Stored for forensics, never acted on. A forged webhook that could flip a payment
-      // to CAPTURED would be a free-goods exploit.
-      this.logger.error(`webhook ${input.eventId} failed signature verification`);
+    if (!verified.valid) {
+      // Stored for forensics, never acted on: a forged "captured" webhook would be free goods.
+      this.logger.error(`${provider.name} webhook ${verified.eventId} failed signature verification`);
       return { accepted: false, duplicate: false };
     }
 
-    await this.process(record.id, body);
+    await this.process(record.id, provider, verified.body);
     return { accepted: true, duplicate: false };
   }
 
   /** Processes one stored webhook. Also used by the retry sweep. */
-  async process(recordId: string, body: RazorpayWebhookBody): Promise<void> {
+  async process(recordId: string, provider: PaymentProvider, body: unknown): Promise<void> {
     try {
-      await this.dispatch(body);
+      const action = provider.interpretWebhook(body);
+      const ctx = { correlationId: `webhook-${provider.name}-${recordId}` };
+      if (action.kind === 'payment') {
+        await this.payments.applyFromWebhook(provider.gateway, action.payment, ctx);
+      } else if (action.kind === 'refund') {
+        await this.refunds.applyGatewayState(action.refund, ctx);
+      } else {
+        this.logger.debug(`${provider.name} webhook ignored: ${action.reason}`);
+      }
       await this.prisma.webhookEvent.update({
         where: { id: recordId },
         data: { processed: true, processedAt: new Date(), attempts: { increment: 1 } },
@@ -98,16 +93,13 @@ export class WebhookService {
     } catch (error) {
       await this.prisma.webhookEvent.update({
         where: { id: recordId },
-        data: {
-          attempts: { increment: 1 },
-          processingError: (error as Error).message.slice(0, 500),
-        },
+        data: { attempts: { increment: 1 }, processingError: (error as Error).message.slice(0, 500) },
       });
       throw error;
     }
   }
 
-  /** Re-drives stored webhooks that failed processing, with a bounded attempt count. */
+  /** Re-drives stored, verified webhooks that failed processing, with a bounded attempt count. */
   async retryFailed(limit = 50, maxAttempts = 5): Promise<number> {
     const pending = await this.prisma.webhookEvent.findMany({
       where: { processed: false, signatureValid: true, attempts: { lt: maxAttempts } },
@@ -118,54 +110,12 @@ export class WebhookService {
     let ok = 0;
     for (const record of pending) {
       try {
-        await this.process(record.id, record.rawPayload as unknown as RazorpayWebhookBody);
+        await this.process(record.id, this.providers.forGateway(record.gateway), record.rawPayload);
         ok++;
       } catch (error) {
         this.logger.warn(`webhook retry ${record.id} failed: ${(error as Error).message}`);
       }
     }
     return ok;
-  }
-
-  private async dispatch(body: RazorpayWebhookBody): Promise<void> {
-    const ctx = { correlationId: `webhook-${body.event}-${body.created_at}` };
-
-    switch (body.event) {
-      case RazorpayWebhookEvents.PAYMENT_AUTHORIZED:
-      case RazorpayWebhookEvents.PAYMENT_CAPTURED:
-      case RazorpayWebhookEvents.PAYMENT_FAILED: {
-        const entity = body.payload.payment?.entity;
-        if (!entity) return;
-
-        const payment = await this.prisma.payment.findUnique({
-          where: { gatewayOrderId: entity.order_id },
-        });
-        if (!payment) {
-          // A payment for an order we never created - usually a dashboard test. Log and
-          // move on rather than failing the webhook forever.
-          this.logger.warn(`webhook for unknown gateway order ${entity.order_id}`);
-          return;
-        }
-
-        await this.payments.applyGatewayState(payment.id, entity, null, ctx);
-        return;
-      }
-
-      case RazorpayWebhookEvents.REFUND_PROCESSED:
-      case RazorpayWebhookEvents.REFUND_FAILED: {
-        const entity = body.payload.refund?.entity;
-        if (!entity) return;
-        await this.refunds.applyGatewayState(entity, ctx);
-        return;
-      }
-
-      case RazorpayWebhookEvents.ORDER_PAID:
-      case RazorpayWebhookEvents.REFUND_CREATED:
-        // Informational; the payment/refund events above carry the state we act on.
-        return;
-
-      default:
-        this.logger.debug(`ignoring webhook event ${body.event}`);
-    }
   }
 }

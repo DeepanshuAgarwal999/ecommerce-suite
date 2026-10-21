@@ -290,6 +290,17 @@ export class StockService {
    * comparison that only raw SQL can express efficiently, which `lowStockReport()`
    * already provides as its own bounded (LIMIT 500) query.
    */
+  /** Stock for one product across every warehouse - admin product insights. */
+  async productStock(productId: string) {
+    const items = await this.prisma.stockItem.findMany({
+      where: { productId, isActive: true },
+      select: { sku: true, onHand: true, reserved: true, warehouseId: true },
+    });
+    const onHand = items.reduce((sum, item) => sum + item.onHand, 0);
+    const reserved = items.reduce((sum, item) => sum + item.reserved, 0);
+    return { onHand, reserved, available: Math.max(0, onHand - reserved), skus: items.length };
+  }
+
   async listStock(query: {
     vendorId?: string;
     warehouseId?: string;

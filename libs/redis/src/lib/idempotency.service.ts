@@ -132,4 +132,15 @@ export class IdempotencyService {
   async markEventProcessed(group: string, eventId: string, ttlSeconds = 259200): Promise<boolean> {
     return this.redis.setIfAbsent(`evt:${group}:${eventId}`, 1, ttlSeconds);
   }
+
+  /**
+   * Undo `markEventProcessed` when the handler FAILED. The marker is taken before the
+   * handler runs (so two replicas can't process the same event at once); if it stayed
+   * after a failure, the consumer's own retry - and every Kafka redelivery for three
+   * days - would see "already processed" and skip it, so the event would never be
+   * applied. Every handleOnce must call this in its catch block.
+   */
+  async releaseEvent(group: string, eventId: string): Promise<void> {
+    await this.redis.del(`evt:${group}:${eventId}`);
+  }
 }

@@ -37,6 +37,7 @@ export interface KafkaModuleOptions {
 export interface ConsumerRegistration {
   groupId: string;
   topics: string[];
+  /** Where to start on partitions with no committed offset. Default true (earliest) - see KafkaConsumerService. */
   fromBeginning?: boolean;
   /** Run partitions of the same consumer concurrently. Ordering is kept per partition. */
   partitionConcurrency?: number;

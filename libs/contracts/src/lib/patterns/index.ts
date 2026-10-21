@@ -36,8 +36,14 @@ export const UserPatterns = {
   DELETE_ADDRESS: 'user.delete-address',
   SET_DEFAULT_ADDRESS: 'user.set-default-address',
   GET_ADDRESS: 'user.get-address',
+  /** Map pin -> address fields (address form "use my location"). */
+  GEO_REVERSE: 'user.geo-reverse',
+  /** Pincode -> city/state/areas (address form autofill). */
+  GEO_PINCODE: 'user.geo-pincode',
   APPLY_VENDOR: 'user.apply-vendor',
   GET_VENDOR: 'user.get-vendor',
+  /** Bulk lookup by vendorCode - product import references vendors by code. */
+  GET_VENDORS_BY_CODES: 'user.get-vendors-by-codes',
   LIST_VENDORS: 'user.list-vendors',
   REVIEW_VENDOR: 'user.review-vendor',
   ADMIN_LIST_USERS: 'user.admin.list-users',
@@ -68,6 +74,8 @@ export const CatalogPatterns = {
   CATEGORY_CARDS: 'catalog.category-cards',
   /** id + categoryId + status for every product, paged - recommendation-service backfill. */
   PRODUCT_INDEX: 'catalog.product-index',
+  /** Products already created from an external source (import idempotency). */
+  FIND_BY_EXTERNAL_IDS: 'catalog.find-by-external-ids',
   GET_PRODUCT: 'catalog.get-product',
   GET_VARIANTS: 'catalog.get-variants',
   CREATE_PRODUCT: 'catalog.create-product',
@@ -77,6 +85,12 @@ export const CatalogPatterns = {
   LIST_VENDOR_PRODUCTS: 'catalog.list-vendor-products',
   CREATE_REVIEW: 'catalog.create-review',
   LIST_REVIEWS: 'catalog.list-reviews',
+  /** Pending (unpublished) reviews for the admin moderation queue. */
+  LIST_PENDING_REVIEWS: 'catalog.list-pending-reviews',
+  /** The caller's own review for a product (to pre-fill the form / block duplicates). */
+  GET_MY_REVIEW: 'catalog.get-my-review',
+  APPROVE_REVIEW: 'catalog.approve-review',
+  REJECT_REVIEW: 'catalog.reject-review',
   /** Bulk variant lookup used by cart/order to price a basket in one call. */
   RESOLVE_VARIANTS: 'catalog.resolve-variants',
   /** Cross-vendor, cross-status listing for the admin product console. */
@@ -139,6 +153,8 @@ export const InventoryPatterns = {
   LOW_STOCK_REPORT: 'inventory.low-stock-report',
   /** Cross-vendor, cross-warehouse stock browser for the admin inventory console. */
   LIST_STOCK: 'inventory.list-stock',
+  /** Admin product insights: on-hand / reserved / available across warehouses for one product. */
+  PRODUCT_STOCK: 'inventory.product-stock',
 } as const;
 
 export const CartPatterns = {
@@ -155,10 +171,14 @@ export const CartPatterns = {
   CHECKOUT_SNAPSHOT: 'cart.checkout-snapshot',
   /** Admin insights: products saved to the most wishlists. */
   ADMIN_TOP_WISHLISTED: 'cart.admin.top-wishlisted',
+  /** Admin product insights: monthly wishlist saves for one product. */
+  ADMIN_PRODUCT_WISHLIST: 'cart.admin.product-wishlist',
 } as const;
 
 export const OrderPatterns = {
   CREATE_ORDER: 'order.create',
+  /** Exact server-side price for explicit items + payment method - creates nothing. */
+  QUOTE: 'order.quote',
   GET_ORDER: 'order.get',
   LIST_MY_ORDERS: 'order.list-mine',
   CANCEL_ORDER: 'order.cancel',
@@ -175,13 +195,20 @@ export const OrderPatterns = {
   ADMIN_ORDERS_TREND: 'order.admin.trend',
   /** Best sellers over N days (units, orders, revenue), plus the same stats for given product ids. */
   ADMIN_TOP_PRODUCTS: 'order.admin.top-products',
+  /** Admin product insights: monthly orders/units/revenue/cancellations/returns for one product. */
+  ADMIN_PRODUCT_SALES: 'order.admin.product-sales',
   VENDOR_LIST_ORDERS: 'order.vendor.list',
   TRACK: 'order.track',
 } as const;
 
 export const PaymentPatterns = {
   CREATE_CHECKOUT: 'payment.create-checkout',
-  VERIFY_SIGNATURE: 'payment.verify-signature',
+  /** Browser/app reports the gateway widget's result; the gateway adapter verifies it. */
+  CONFIRM: 'payment.confirm',
+  /** Which gateway new payments use - lets clients preload its SDK and label the option. */
+  ACTIVE_PROVIDER: 'payment.active-provider',
+  /** Raw webhook from any gateway: { provider, rawBody, headers }. Gateway-only route. */
+  WEBHOOK: 'payment.webhook',
   GET_PAYMENT: 'payment.get',
   LIST_MY_PAYMENTS: 'payment.list-mine',
   REFUND: 'payment.refund',
@@ -227,4 +254,6 @@ export const RecommendationPatterns = {
   FOR_CART: 'recommendation.for-cart',
   /** Home page personalisation: recently viewed, favourite categories, picked for you. */
   FOR_USER: 'recommendation.for-user',
+  /** Admin product insights: monthly views/carts/wishlists + category benchmarks. */
+  PRODUCT_ACTIVITY: 'recommendation.product-activity',
 } as const;

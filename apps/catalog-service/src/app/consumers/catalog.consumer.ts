@@ -87,9 +87,15 @@ export class CatalogConsumer implements OnApplicationBootstrap {
     });
     if (applied) return;
 
-    await handler();
-    await this.prisma.processedEvent.create({
-      data: { eventId: envelope.eventId, consumerGroup: group },
-    });
+    try {
+      await handler();
+      await this.prisma.processedEvent.create({
+        data: { eventId: envelope.eventId, consumerGroup: group },
+      });
+    } catch (error) {
+      // Let the retry / redelivery actually re-run it (see IdempotencyService.releaseEvent).
+      await this.idempotency.releaseEvent(group, envelope.eventId);
+      throw error;
+    }
   }
 }

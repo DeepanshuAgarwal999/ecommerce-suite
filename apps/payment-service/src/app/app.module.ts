@@ -11,7 +11,7 @@ import { PaymentController } from './payment.controller';
 import { PaymentJobs } from './payment/payment.jobs';
 import { PaymentService } from './payment/payment.service';
 import { PrismaModule } from './prisma/prisma.module';
-import { RazorpayClient } from './razorpay/razorpay.client';
+import { paymentProviders } from './providers/providers';
 import { RefundService } from './refund/refund.service';
 import { WebhookService } from './webhook/webhook.service';
 
@@ -27,7 +27,8 @@ import { WebhookService } from './webhook/webhook.service';
   ],
   controllers: [PaymentController],
   providers: [
-    RazorpayClient,
+    // Gateway adapters + registry (providers/providers.ts is the one list to extend).
+    ...paymentProviders,
     PaymentService,
     RefundService,
     WebhookService,

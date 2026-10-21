@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, OptionalAuth, Public } from '@ecommerce/auth';
 import { Ctx, PaginationQueryDto } from '@ecommerce/common';
@@ -8,6 +8,8 @@ import {
   CreateReviewDto,
   InventoryPatterns,
   MerchandisingPatterns,
+  OrderPatterns,
+  OrderStatus,
   RecommendationPatterns,
   RequestContext,
   SearchProductsDto,
@@ -152,6 +154,60 @@ export class CatalogController {
     });
   }
 
+  @Get('products/:productId/reviews/mine')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'My review for this product, if any' })
+  myReview(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('productId', ParseUUIDPipe) productId: string,
+  ) {
+    return this.gateway.catalog(CatalogPatterns.GET_MY_REVIEW, {
+      productId,
+      userId: user.userId,
+    });
+  }
+
+  @Get('products/:productId/reviewable-orders')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'My delivered orders containing this product (eligible for rating)' })
+  async reviewableOrders(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('productId', ParseUUIDPipe) productId: string,
+  ) {
+    // Eligible = reached DELIVERED (or a post-delivery state) AND contains the product.
+    // Order list rows carry only a summary, so confirm membership per order.
+    const pages = await Promise.all(
+      REVIEW_ELIGIBLE_STATUSES_ARR.map((status) =>
+        this.gateway.order<{ items?: { id: string }[] }>(OrderPatterns.LIST_MY_ORDERS, {
+          userId: user.userId,
+          status,
+          page: 1,
+          limit: 50,
+        }),
+      ),
+    );
+    const candidates = pages.flatMap((page) => page?.items ?? []) as { id: string }[];
+    const details = await Promise.all(
+      candidates.map((order) =>
+        this.gateway
+          .order<{
+            id: string;
+            status: string;
+            createdAt: string;
+            items: { productId: string }[];
+          }>(OrderPatterns.GET_ORDER, { orderId: order.id, userId: user.userId })
+          .catch(() => null),
+      ),
+    );
+    const items = (details.filter(Boolean) as NonNullable<(typeof details)[number]>[]).filter(
+      (order) =>
+        REVIEW_ELIGIBLE_STATUSES.has(order.status) &&
+        (order.items ?? []).some((item) => item.productId === productId),
+    );
+    items.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+    return { items };
+  }
+
   @Public()
   @Get('products/:productId/reviews')
   @ApiOperation({ summary: 'Reviews for a product' })
@@ -170,16 +226,40 @@ export class CatalogController {
 
   @Post('reviews')
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Write or update a review' })
-  createReview(
+  @ApiOperation({ summary: 'Write or update a review (only after the order is delivered)' })
+  async createReview(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateReviewDto,
     @Ctx() ctx: RequestContext,
   ) {
+    // Delivery gate: the order must belong to the caller, contain this product,
+    // and have reached DELIVERED (or a post-delivery state). The service stamps
+    // the verified badge only from this check, never from a client claim.
+    const order = await this.gateway.order<{
+      id: string;
+      userId: string;
+      status: string;
+      items: { productId: string }[];
+    }>(OrderPatterns.GET_ORDER, { orderId: dto.orderId, userId: user.userId });
+
+    if (!order || order.userId !== user.userId) {
+      throw new ForbiddenException('This order does not belong to you');
+    }
+    const hasProduct = (order.items ?? []).some((item) => item.productId === dto.productId);
+    if (!hasProduct) {
+      throw new BadRequestException('This product is not part of the given order');
+    }
+    if (!REVIEW_ELIGIBLE_STATUSES.has(order.status)) {
+      throw new BadRequestException(
+        `You can rate this product only after the order is delivered (current status: ${order.status})`,
+      );
+    }
+
     return this.gateway.catalog(CatalogPatterns.CREATE_REVIEW, {
       user: { id: user.userId, name: this.displayName(user) },
       dto,
       ctx,
+      verified: { orderId: order.id, isVerifiedPurchase: true },
     });
   }
 
@@ -189,3 +269,18 @@ export class CatalogController {
     return `Customer ${user.mobile.slice(-4)}`;
   }
 }
+
+/**
+ * A buyer may rate only once the order reached the customer's hands. Post-delivery
+ * states (return requested / approved / returned / refunded) all imply the item was
+ * delivered first, so they stay eligible; anything before DELIVERED is not.
+ */
+const REVIEW_ELIGIBLE_STATUSES = new Set<string>([
+  OrderStatus.DELIVERED,
+  OrderStatus.RETURN_REQUESTED,
+  OrderStatus.RETURN_APPROVED,
+  OrderStatus.RETURNED,
+  OrderStatus.REFUNDED,
+]);
+
+const REVIEW_ELIGIBLE_STATUSES_ARR = [...REVIEW_ELIGIBLE_STATUSES] as OrderStatus[];

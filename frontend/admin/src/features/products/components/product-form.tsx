@@ -32,6 +32,7 @@ function toCreateInput(
     brandId: values.brandId || undefined,
     isReturnable: values.isReturnable,
     isCodAvailable: values.isCodAvailable,
+    deliveryPrice: values.deliveryPrice,
     submitForReview,
     imageUrls: values.imageUrls
       ? values.imageUrls
@@ -338,6 +339,18 @@ export function ProductForm({
             onCheckedChange={(checked) => form.setValue('isCodAvailable', checked)}
           />
         </label>
+        <div className="mt-4">
+          <label className="flex items-center gap-4">
+            <span className="text-sm">Delivery price (₹, manual override)</span>
+            <Input
+              type="number"
+              min={0}
+              className="w-32"
+              placeholder="0"
+              {...form.register("deliveryPrice", { setValueAs: (value) => (value === "" ? undefined : Number(value)) })}
+            />
+          </label>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3 border-t pt-4">

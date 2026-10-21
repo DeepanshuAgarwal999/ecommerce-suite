@@ -8,6 +8,7 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
@@ -244,6 +245,11 @@ export class CreateProductDto {
   @MaxLength(120)
   @IsOptional()
   externalProductId?: string;
+
+  @ApiPropertyOptional()
+  @IsNumber()
+  @Min(0)
+  deliveryPrice?: number;
 }
 
 export class UpdateProductDto extends PartialType(CreateProductDto) {}
@@ -343,6 +349,18 @@ export class SearchProductsDto {
   limit?: number;
 }
 
+export class CreateReviewApprovalDto {
+  @ApiProperty({ description: 'Status for the review (APPROVED or REJECTED)' })
+  @IsIn([ProductStatus.ACTIVE, ProductStatus.REJECTED])
+  status!: ProductStatus;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @MaxLength(500)
+  @IsOptional()
+  reason?: string;
+}
+
 export class CreateReviewDto {
   @ApiProperty()
   @IsUUID()
@@ -374,8 +392,10 @@ export class CreateReviewDto {
   @IsOptional()
   imageUrls?: string[];
 
-  @ApiPropertyOptional({ description: 'Order this review relates to, for the verified badge' })
+  @ApiProperty({
+    description:
+      'Delivered order this review relates to. Required: only buyers whose order reached DELIVERED may rate, and the product must be one of the order lines.',
+  })
   @IsUUID()
-  @IsOptional()
-  orderId?: string;
+  orderId!: string;
 }
