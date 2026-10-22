@@ -1,0 +1,34 @@
+# Public entry point for the production stack (infra/docker-compose.prod.yml).
+# Caddy fetches and renews Let's Encrypt certificates for every host below on its own;
+# ports 80 and 443 just have to be reachable from the internet.
+#
+#   https://{$DOMAIN}            storefront, plus /api/* -> api-gateway (same origin, so the
+#                                refresh cookie is first-party and no CORS is needed)
+#   https://partner.{$DOMAIN}    seller console
+#   https://admin.{$DOMAIN}      staff console
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy api-gateway:3000
+	}
+
+	handle {
+		reverse_proxy web:4200
+	}
+}
+
+partner.{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy partner:4201
+}
+
+admin.{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy admin:4300
+}

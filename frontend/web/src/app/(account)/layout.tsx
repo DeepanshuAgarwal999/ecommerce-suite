@@ -5,6 +5,7 @@ import {
   SiteHeader,
 } from '@/components/layout';
 import { AccountNav } from '@/features/auth/components/account-nav';
+import { SupportWidget } from '@/features/support/components/support-widget';
 
 export default function AccountLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -16,6 +17,7 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
         <div className="min-w-0">{children}</div>
       </main>
       <SiteFooter />
+      <SupportWidget />
       <BottomNav />
     </div>
   );

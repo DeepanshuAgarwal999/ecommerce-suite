@@ -14,6 +14,7 @@ import {
   RequestContext,
   SearchProductsDto,
   SearchSuggestDto,
+  ShippingEstimateDto,
   TrackProductViewDto,
   TrackSearchDto,
 } from '@ecommerce/contracts';
@@ -134,6 +135,28 @@ export class CatalogController {
   @ApiOperation({ summary: 'Product detail (accepts the product id or its slug)' })
   product(@Param('productId') productId: string) {
     return this.gateway.catalog(CatalogPatterns.GET_PRODUCT, { productId });
+  }
+
+  @Public()
+  @Get('shipping')
+  @ApiOperation({ summary: 'Store delivery settings: base fee, free-delivery threshold, COD fee (admin-managed)' })
+  shippingSettings() {
+    return this.gateway.catalog(CatalogPatterns.GET_SHIPPING_SETTINGS, {});
+  }
+
+  @Public()
+  @Post('shipping/estimate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delivery charge for a basket - same calculator as the order total' })
+  shippingEstimate(@Body() dto: ShippingEstimateDto) {
+    return this.gateway.catalog(CatalogPatterns.ESTIMATE_SHIPPING, dto);
+  }
+
+  @Public()
+  @Get('products/:productId/delivery')
+  @ApiOperation({ summary: 'The delivery rule that applies to one product (for the product page)' })
+  productDelivery(@Param('productId', ParseUUIDPipe) productId: string) {
+    return this.gateway.catalog(CatalogPatterns.RESOLVE_SHIPPING, { productId });
   }
 
   @Public()

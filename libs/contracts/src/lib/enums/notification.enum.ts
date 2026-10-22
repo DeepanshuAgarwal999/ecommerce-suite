@@ -81,6 +81,9 @@ export const TemplateKeys = {
   BACK_IN_STOCK: 'catalog.back-in-stock',
   PRICE_DROP: 'catalog.price-drop',
   CART_ABANDONED: 'cart.abandoned',
+  SUPPORT_TICKET_CREATED: 'support.ticket-created',
+  SUPPORT_AGENT_REPLY: 'support.agent-reply',
+  SUPPORT_TICKET_RESOLVED: 'support.ticket-resolved',
 } as const;
 
 export type TemplateKey = (typeof TemplateKeys)[keyof typeof TemplateKeys];

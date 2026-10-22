@@ -26,6 +26,7 @@ export class GatewayService {
     @Inject(ServiceTokens.PAYMENT) private readonly paymentClient: ClientProxy,
     @Inject(ServiceTokens.NOTIFICATION) private readonly notificationClient: ClientProxy,
     @Inject(ServiceTokens.RECOMMENDATION) private readonly recommendationClient: ClientProxy,
+    @Inject(ServiceTokens.SUPPORT) private readonly supportClient: ClientProxy,
   ) {
     this.timeoutMs = config.get<number>('observability.rpcTimeoutMs', 10_000);
   }
@@ -88,6 +89,10 @@ export class GatewayService {
       timeoutMs: Math.min(this.timeoutMs, 1500),
       service: 'recommendation-service',
     });
+  }
+
+  support<T>(pattern: string, payload: unknown): Promise<T> {
+    return rpc<T>(this.supportClient, pattern, payload, { timeoutMs: this.timeoutMs, service: 'support-service' });
   }
 
   /** Fire-and-forget event to recommendation-service - no reply, never blocks the request. */

@@ -66,5 +66,15 @@ export const endpoints = {
     reorderFooterLinks: (columnId: string) => `/admin/footer/columns/${columnId}/links/reorder`,
     footerSettings: '/admin/footer/settings',
     resetCache: '/admin/settings/reset-cache',
+    supportSummary: '/admin/support/summary',
+    supportTickets: '/admin/support/tickets',
+    supportTicket: (id: string) => `/admin/support/tickets/${id}`,
+    supportTicketMessages: (id: string) => `/admin/support/tickets/${id}/messages`,
+    supportClaimNext: '/admin/support/queue/claim',
+    shipping: '/admin/shipping',
+    shippingSettings: '/admin/shipping/settings',
+    shippingRule: (scope: 'CATEGORY' | 'PRODUCT', targetId: string) => `/admin/shipping/rules/${scope}/${targetId}`,
+    /** Public read - the effective rule for one product. */
+    productDelivery: (productId: string) => `/catalog/products/${productId}/delivery`,
   },
 } as const;

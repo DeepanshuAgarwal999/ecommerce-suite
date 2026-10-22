@@ -1,0 +1,20 @@
+# Build context is the repo root (infra/Dockerfile, infra/Dockerfile.frontend).
+# Keep host installs, build output and secrets out of the images.
+**/node_modules
+**/.next
+dist
+tmp
+out-tsc
+coverage
+.nx/cache
+.nx/workspace-data
+.git
+**/*.log
+
+# Secrets: services get env from compose, frontends get NEXT_PUBLIC_* as build args.
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+firebase-service-account.json

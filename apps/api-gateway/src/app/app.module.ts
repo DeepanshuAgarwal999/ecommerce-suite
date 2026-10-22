@@ -13,7 +13,11 @@ import { AdminController } from './admin/admin.controller';
 import { InsightsAdminController } from './admin/insights-admin.controller';
 import { ProductImportController } from './admin/product-import.controller';
 import { ProductInsightsController } from './admin/product-insights.controller';
+import { ShippingAdminController } from './admin/shipping-admin.controller';
 import { RecommendationController } from './recommendation/recommendation.controller';
+import { AdminSupportController } from './support/admin-support.controller';
+import { SupportAssistantService } from './support/assistant/assistant.service';
+import { SupportController } from './support/support.controller';
 import { GeoController } from './users/geo.controller';
 import { MerchandisingAdminController } from './admin/merchandising-admin.controller';
 import { AuthCookieService } from './auth/auth-cookie.service';
@@ -66,12 +70,16 @@ import { VendorController } from './vendor/vendor.controller';
     AdminController,
     MerchandisingAdminController,
     InsightsAdminController,
+    ShippingAdminController,
     RecommendationController,
     GeoController,
+    SupportController,
+    AdminSupportController,
   ],
   providers: [
     GatewayService,
     AuthCookieService,
+    SupportAssistantService,
     { provide: APP_GUARD, useClass: GatewayRateLimitGuard },
   ],
 })

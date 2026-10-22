@@ -21,6 +21,7 @@ import { SetStockDialog } from '@/features/inventory/components/set-stock-dialog
 import { ReviewProductDialog } from '@/features/products/components/review-product-dialog';
 import { useArchiveProduct, useProduct } from '@/features/products/hooks/use-products';
 import { ProductInsightsPanel } from '@/features/products/insights/product-insights-panel';
+import { ProductDeliveryCard } from '@/features/shipping/components/product-delivery-card';
 import type { ProductSource, ProductVariant } from '@/features/products/types';
 import { formatDate, formatMoney } from '@/lib/format';
 
@@ -194,6 +195,10 @@ export default function ProductDetailPage() {
         Created {formatDate(product.createdAt)}
         {product.publishedAt && ` · Published ${formatDate(product.publishedAt)}`}
       </p>
+
+      <div className="mt-6 max-w-xl">
+        <ProductDeliveryCard productId={product.id} productTitle={product.title} categoryId={product.categoryId} />
+      </div>
 
       <div className="mt-8">
         <ProductInsightsPanel productId={product.id} />

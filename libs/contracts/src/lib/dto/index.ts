@@ -11,3 +11,5 @@ export * from './admin.dto';
 export * from './merchandising.dto';
 export * from './analytics.dto';
 export * from './product-import.dto';
+export * from './support.dto';
+export * from './shipping.dto';

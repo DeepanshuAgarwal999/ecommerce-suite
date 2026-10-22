@@ -15,6 +15,8 @@ import { FooterService } from './merchandising/footer.service';
 import { HomeSectionService } from './merchandising/home-section.service';
 import { MerchandisingController } from './merchandising/merchandising.controller';
 import { ThemeService } from './merchandising/theme.service';
+import { ShippingController } from './shipping/shipping.controller';
+import { ShippingService } from './shipping/shipping.service';
 import { OutboxProcessor } from './outbox/outbox.processor';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductService } from './product/product.service';
@@ -29,7 +31,7 @@ import { ReviewService } from './review/review.service';
     ScheduleModule.forRoot(),
     HealthModule,
   ],
-  controllers: [CatalogController, MerchandisingController, AnalyticsController],
+  controllers: [CatalogController, MerchandisingController, AnalyticsController, ShippingController],
   providers: [
     CategoryService,
     BrandService,
@@ -40,6 +42,7 @@ import { ReviewService } from './review/review.service';
     AnalyticsService,
     HomeSectionService,
     FooterService,
+    ShippingService,
     CatalogConsumer,
     OutboxProcessor,
   ],

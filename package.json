@@ -4,7 +4,9 @@
   "license": "MIT",
   "private": true,
   "workspaces": [
-    "frontend/*"
+    "frontend/web",
+    "frontend/admin",
+    "frontend/partner"
   ],
   "engines": {
     "node": ">=22"
@@ -30,6 +32,7 @@
     "stack:down": "docker compose --env-file .env -f infra/docker-compose.yml --profile app down"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.0.0",
     "@hookform/resolvers": "^5.9.1",
     "@nestjs/common": "^11.1.6",
     "@nestjs/config": "^4.0.2",

@@ -53,6 +53,17 @@ export const UserPatterns = {
 } as const;
 
 export const CatalogPatterns = {
+  // --- delivery charges (admin-managed, see ShippingService) ---
+  /** Store-wide delivery settings (public read). */
+  GET_SHIPPING_SETTINGS: 'catalog.shipping.get-settings',
+  UPDATE_SHIPPING_SETTINGS: 'catalog.shipping.update-settings',
+  LIST_SHIPPING_RULES: 'catalog.shipping.list-rules',
+  UPSERT_SHIPPING_RULE: 'catalog.shipping.upsert-rule',
+  DELETE_SHIPPING_RULE: 'catalog.shipping.delete-rule',
+  /** Settings + effective rule per product - what cart-service prices orders with. */
+  RESOLVE_SHIPPING: 'catalog.shipping.resolve',
+  /** Public basket estimate, same calculator as the order total. */
+  ESTIMATE_SHIPPING: 'catalog.shipping.estimate',
   LIST_CATEGORIES: 'catalog.list-categories',
   CATEGORY_TREE: 'catalog.category-tree',
   GET_CATEGORY: 'catalog.get-category',
@@ -238,6 +249,7 @@ export const ServiceTokens = {
   PAYMENT: 'PAYMENT_SERVICE',
   NOTIFICATION: 'NOTIFICATION_SERVICE',
   RECOMMENDATION: 'RECOMMENDATION_SERVICE',
+  SUPPORT: 'SUPPORT_SERVICE',
 } as const;
 
 /**
@@ -256,4 +268,40 @@ export const RecommendationPatterns = {
   FOR_USER: 'recommendation.for-user',
   /** Admin product insights: monthly views/carts/wishlists + category benchmarks. */
   PRODUCT_ACTIVITY: 'recommendation.product-activity',
+} as const;
+
+/**
+ * support-service. The gateway runs the assistant's model loop (it streams to the
+ * client and holds the user's identity); support-service persists conversations and
+ * owns tickets and the agent queue.
+ */
+export const SupportPatterns = {
+  // --- assistant conversations -------------------------------------------------
+  /** Find-or-create a conversation for a user; returns it with llmHistory. */
+  OPEN_CONVERSATION: 'support.open-conversation',
+  /** Append one completed turn (display messages + new llmHistory blocks). */
+  APPEND_TURN: 'support.append-turn',
+  /** Store the assistant's ticket draft for customer confirmation. */
+  SET_TICKET_DRAFT: 'support.set-ticket-draft',
+  /** Customer-facing: a conversation's display messages. */
+  GET_CONVERSATION: 'support.get-conversation',
+  LIST_CONVERSATIONS: 'support.list-conversations',
+  CONVERSATION_FEEDBACK: 'support.conversation-feedback',
+  /** Turn the stored draft into a ticket. */
+  CONFIRM_TICKET_DRAFT: 'support.confirm-ticket-draft',
+
+  // --- customer tickets --------------------------------------------------------
+  CREATE_TICKET: 'support.create-ticket',
+  LIST_MY_TICKETS: 'support.list-my-tickets',
+  GET_MY_TICKET: 'support.get-my-ticket',
+  CUSTOMER_REPLY: 'support.customer-reply',
+
+  // --- agent console -----------------------------------------------------------
+  ADMIN_LIST_TICKETS: 'support.admin-list-tickets',
+  ADMIN_GET_TICKET: 'support.admin-get-ticket',
+  ADMIN_SUMMARY: 'support.admin-summary',
+  /** Atomically assign the next ticket in the queue to the calling agent. */
+  CLAIM_NEXT: 'support.claim-next',
+  ADMIN_REPLY: 'support.admin-reply',
+  ADMIN_UPDATE_TICKET: 'support.admin-update-ticket',
 } as const;

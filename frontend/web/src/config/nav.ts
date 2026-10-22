@@ -66,6 +66,7 @@ export const accountNav = [
   { label: 'Orders', href: '/account/orders' },
   { label: 'Wishlist', href: '/account/wishlist' },
   { label: 'Addresses', href: '/account/addresses' },
+  { label: 'Support', href: '/account/support' },
 ] as const;
 
 export const footerNav = [

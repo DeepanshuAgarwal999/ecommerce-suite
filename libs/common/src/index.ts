@@ -26,6 +26,7 @@ export * from './lib/prisma/prisma-health';
 
 export * from './lib/utils/phone.util';
 export * from './lib/utils/money.util';
+export * from './lib/utils/shipping.util';
 export * from './lib/utils/id.util';
 export * from './lib/utils/hash.util';
 export * from './lib/utils/rpc.util';

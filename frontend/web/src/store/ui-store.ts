@@ -17,6 +17,11 @@ interface UiState {
   setMobileNavOpen: (open: boolean) => void;
   openLogin: () => void;
   closeLogin: () => void;
+  /** The support assistant panel, openable from any page with an optional first message. */
+  isSupportOpen: boolean;
+  supportPrefill: string;
+  openSupport: (prefill?: string) => void;
+  closeSupport: () => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -31,4 +36,8 @@ export const useUiStore = create<UiState>((set) => ({
   setMobileNavOpen: (isMobileNavOpen) => set({ isMobileNavOpen }),
   openLogin: () => set({ isLoginOpen: true }),
   closeLogin: () => set({ isLoginOpen: false }),
+  isSupportOpen: false,
+  supportPrefill: '',
+  openSupport: (prefill = '') => set({ isSupportOpen: true, supportPrefill: prefill }),
+  closeSupport: () => set({ isSupportOpen: false, supportPrefill: '' }),
 }));

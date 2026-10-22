@@ -7,6 +7,7 @@ import {
 } from '@/components/layout';
 import { FloatingCartBar } from '@/features/cart/components/floating-cart-bar';
 import { CategoryChips } from '@/features/home/components/category-chips';
+import { SupportWidget } from '@/features/support/components/support-widget';
 import { FestiveGarland, getActiveTheme, presetMeta } from '@/features/theme';
 
 /** Storefront chrome: announcement + header + category nav on top, footer and
@@ -25,6 +26,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       <main className="flex-1 pb-bottom-nav md:pb-0">{children}</main>
       <SiteFooter />
       <FloatingCartBar />
+      <SupportWidget />
       <BottomNav />
     </div>
   );

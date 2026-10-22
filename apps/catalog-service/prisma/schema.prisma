@@ -510,3 +510,64 @@ model ProcessedEvent {
   @@index([processedAt])
   @@map("processed_events")
 }
+
+// ---------------------------------------------------------------------------
+// Delivery charges - admin-managed (Settings -> Delivery in the console).
+//
+// Effective rule for a product = its own PRODUCT rule, else the nearest
+// CATEGORY rule walking up the category tree, else STANDARD (the store fee).
+// cart-service prices every order through RESOLVE_SHIPPING + the shared
+// computeShipping() calculator in libs/common.
+// ---------------------------------------------------------------------------
+
+enum ShippingMode {
+  STANDARD
+  FREE
+  FIXED
+}
+
+enum ShippingChargeBasis {
+  PER_UNIT
+  PER_LINE
+}
+
+enum ShippingRuleScope {
+  CATEGORY
+  PRODUCT
+}
+
+/// Singleton (id = "default"). Created on first read from the env defaults, then owned by admins.
+model ShippingSettings {
+  id                    String   @id @default("default") @db.VarChar(20)
+  /// Order-level fee for STANDARD items, paise.
+  baseFee               Int
+  /// Free delivery at or above this basket value; null = never free.
+  freeShippingThreshold Int?
+  codEnabled            Boolean  @default(true)
+  codFee                Int
+  updatedBy             String?  @db.Uuid
+  updatedAt             DateTime @updatedAt
+
+  @@map("shipping_settings")
+}
+
+/// One rule per (scope, target). `targetId` is a category or product id - no FK,
+/// because one column points at two tables; the service validates the target.
+model ShippingRule {
+  id          String              @id @default(uuid()) @db.Uuid
+  scope       ShippingRuleScope
+  targetId    String              @db.Uuid
+  mode        ShippingMode
+  /// FIXED only: the item's own delivery charge, paise.
+  fee         Int                 @default(0)
+  chargeBasis ShippingChargeBasis @default(PER_UNIT)
+  /// FIXED only: waive the charge when the line total reaches this.
+  freeAbove   Int?
+  note        String?             @db.VarChar(200)
+  updatedBy   String?             @db.Uuid
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@unique([scope, targetId])
+  @@map("shipping_rules")
+}

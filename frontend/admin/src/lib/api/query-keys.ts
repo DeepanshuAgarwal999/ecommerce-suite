@@ -61,4 +61,15 @@ export const queryKeys = {
     all: ['footer'] as const,
     list: () => [...queryKeys.footer.all, 'list'] as const,
   },
+  shipping: {
+    all: ['shipping'] as const,
+    overview: () => [...queryKeys.shipping.all, 'overview'] as const,
+    product: (productId: string) => [...queryKeys.shipping.all, 'product', productId] as const,
+  },
+  support: {
+    all: ['support'] as const,
+    summary: () => [...queryKeys.support.all, 'summary'] as const,
+    list: (query: Record<string, unknown>) => [...queryKeys.support.all, 'list', query] as const,
+    detail: (id: string) => [...queryKeys.support.all, 'detail', id] as const,
+  },
 } as const;

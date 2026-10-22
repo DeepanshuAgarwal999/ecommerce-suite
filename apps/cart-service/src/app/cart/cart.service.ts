@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
-import { AppException, ErrorCode, computeTotals, rpc } from '@ecommerce/common';
+import { AppException, ErrorCode, computeShipping, computeTotals, rpc } from '@ecommerce/common';
 import {
   CacheKeys,
   CacheTtl,
@@ -11,6 +11,7 @@ import {
   Limits,
   RequestContext,
   ServiceTokens,
+  ShippingContext,
 } from '@ecommerce/contracts';
 import { outboxRow } from '@ecommerce/kafka';
 import { RedisService } from '@ecommerce/redis';
@@ -63,9 +64,6 @@ interface AvailabilityView {
 export class CartService {
   private readonly logger = new Logger(CartService.name);
   private readonly rpcTimeout: number;
-  private readonly freeShippingThreshold: number;
-  private readonly shippingFee: number;
-  private readonly codFee: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -76,9 +74,6 @@ export class CartService {
     @Inject(ServiceTokens.INVENTORY) private readonly inventory: ClientProxy,
   ) {
     this.rpcTimeout = config.get<number>('observability.rpcTimeoutMs', 10_000);
-    this.freeShippingThreshold = config.get<number>('business.freeShippingThreshold', 49900);
-    this.shippingFee = config.get<number>('business.defaultShippingFee', 4900);
-    this.codFee = config.get<number>('business.codFee', 2900);
   }
 
   async getCart(userId: string, options: { pincode?: string; refresh?: boolean } = {}) {
@@ -337,11 +332,7 @@ export class CartService {
       };
     });
 
-    const totals = this.priceCart(
-      lines.map((line) => ({ lineTotal: line.lineTotal, taxBps: line.taxBps })),
-      cart.couponDiscount,
-      input.paymentMethod === 'COD',
-    );
+    const totals = await this.priceCart(lines, cart.couponDiscount, input.paymentMethod === 'COD');
 
     // LOCKED stops a second tab from mutating the basket while payment is in flight.
     await this.prisma.cart.update({
@@ -448,11 +439,7 @@ export class CartService {
       lineTotal: variant.price * quantity,
     }));
 
-    const totals = this.priceCart(
-      lines.map((line) => ({ lineTotal: line.lineTotal, taxBps: line.taxBps })),
-      0,
-      input.paymentMethod === 'COD',
-    );
+    const totals = await this.priceCart(lines, 0, input.paymentMethod === 'COD');
 
     return {
       cartId: null,
@@ -555,10 +542,12 @@ export class CartService {
       };
     });
 
-    const totals = this.priceCart(
-      enriched.map((item) => ({ lineTotal: item.lineTotal, taxBps: 0 })),
-      cart.couponDiscount,
-      false,
+    // The cart screen is a preview: if catalog is briefly unreachable, show it priced
+    // with the base settings rather than failing to show the cart at all. Quotes and
+    // checkout never take this path - they always price with the live rules.
+    const previewLines = enriched.map((item) => ({ productId: item.productId, quantity: item.quantity, lineTotal: item.lineTotal, taxBps: 0 }));
+    const totals = await this.priceCart(previewLines, cart.couponDiscount, false).catch(() =>
+      this.priceCart(previewLines, cart.couponDiscount, false, this.fallbackShipping()),
     );
 
     // Keep the denormalised counters roughly current for the badge; exactness is not
@@ -579,21 +568,29 @@ export class CartService {
     };
   }
 
-  private priceCart(
-    lines: { lineTotal: number; taxBps: number }[],
+  /**
+   * Order totals. Delivery comes from the admin-managed rules (store settings,
+   * category and product rules) through the shared `computeShipping` calculator -
+   * the same one the storefront's estimate uses, so preview and charge agree.
+   */
+  private async priceCart(
+    lines: { productId: string; quantity: number; lineTotal: number; taxBps: number }[],
     couponDiscount: number,
     isCod: boolean,
+    context?: ShippingContext,
   ) {
+    const shippingContext = context ?? (await this.resolveShipping(lines.map((line) => line.productId)));
+    const { settings } = shippingContext;
+    if (isCod && !settings.codEnabled) {
+      throw new AppException(ErrorCode.VALIDATION_FAILED, 'Cash on delivery is currently unavailable. Please pay online.', HttpStatus.BAD_REQUEST);
+    }
+
     const itemTotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
     const discountTotal = Math.min(couponDiscount, itemTotal);
-    const shipping =
-      itemTotal === 0 || itemTotal - discountTotal >= this.freeShippingThreshold
-        ? 0
-        : this.shippingFee;
+    const shipping = computeShipping(lines, discountTotal, shippingContext);
 
     // Weighted average tax rate across the lines, so a mixed basket is taxed correctly
     // without having to carry per-line tax through the totals object.
-    const taxable = itemTotal - discountTotal;
     const weightedBps =
       itemTotal > 0
         ? Math.round(
@@ -605,11 +602,39 @@ export class CartService {
       ...computeTotals({
         itemTotal,
         discountTotal,
-        shippingTotal: shipping,
+        shippingTotal: shipping.shippingTotal,
         taxBps: weightedBps,
-        codFee: isCod ? this.codFee : 0,
+        codFee: isCod ? settings.codFee : 0,
       }),
-      freeShippingRemaining: Math.max(0, this.freeShippingThreshold - taxable),
+      /** Null when free delivery isn't on offer for this basket (threshold off, or only FREE/FIXED items). */
+      freeShippingRemaining: shipping.freeShippingRemaining,
+      shipping: {
+        baseFee: shipping.baseFee,
+        itemCharges: shipping.itemCharges,
+        freeShippingThreshold: settings.freeShippingThreshold,
+      },
+    };
+  }
+
+  private resolveShipping(productIds: string[]): Promise<ShippingContext> {
+    return rpc<ShippingContext>(
+      this.catalog,
+      CatalogPatterns.RESOLVE_SHIPPING,
+      { productIds: [...new Set(productIds)] },
+      { timeoutMs: this.rpcTimeout, service: 'catalog-service' },
+    );
+  }
+
+  /** Cart-preview fallback only: env defaults, no per-item rules. */
+  private fallbackShipping(): ShippingContext {
+    return {
+      settings: {
+        baseFee: this.config.get<number>('business.defaultShippingFee', 4900),
+        freeShippingThreshold: this.config.get<number>('business.freeShippingThreshold', 49900),
+        codEnabled: true,
+        codFee: this.config.get<number>('business.codFee', 2900),
+      },
+      rules: {},
     };
   }
 

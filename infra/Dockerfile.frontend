@@ -1,0 +1,50 @@
+# syntax=docker/dockerfile:1.7
+#
+# One Dockerfile for the three Next.js apps (frontend/web, frontend/partner, frontend/admin):
+#
+#   docker build -f infra/Dockerfile.frontend \
+#     --build-arg APP=web --build-arg PORT=4200 \
+#     --build-arg NEXT_PUBLIC_API_URL=https://shop.example.com/api/v1 \
+#     --build-arg NEXT_PUBLIC_SITE_URL=https://shop.example.com \
+#     -t ecom/web .
+#
+# NEXT_PUBLIC_* values are inlined into the client bundle by `next build`, so they are
+# build args, not runtime env: changing the domain means rebuilding the image.
+
+ARG NODE_VERSION=22
+
+# ---------------------------------------------------------------------------
+FROM node:${NODE_VERSION}-alpine AS deps
+WORKDIR /workspace
+RUN apk add --no-cache libc6-compat
+COPY package.json package-lock.json ./
+COPY frontend/web/package.json frontend/web/package.json
+COPY frontend/partner/package.json frontend/partner/package.json
+COPY frontend/admin/package.json frontend/admin/package.json
+# postinstall generates Prisma clients, which the frontends never import.
+RUN npm ci --ignore-scripts
+
+# ---------------------------------------------------------------------------
+FROM deps AS build
+ARG APP
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_SITE_URL
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
+    NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
+COPY . .
+# NODE_ENV pinned for the same Turbopack-prerenderer reason as frontend/web/project.json.
+RUN cd frontend/${APP} && NODE_ENV=production npx next build
+
+# ---------------------------------------------------------------------------
+FROM build AS runtime
+ARG APP
+ARG PORT=4200
+ENV NODE_ENV=production \
+    PORT=${PORT} \
+    HOSTNAME=0.0.0.0
+WORKDIR /workspace/frontend/${APP}
+RUN chown -R node:node .next
+USER node
+EXPOSE ${PORT}
+CMD ["sh", "-c", "exec npx next start --port ${PORT} --hostname 0.0.0.0"]

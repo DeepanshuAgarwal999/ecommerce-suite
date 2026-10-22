@@ -8,6 +8,7 @@ out-tsc
 .env
 .env.*
 !.env.example
+!infra/.env.prod.example
 coverage
 .DS_Store
 Thumbs.db

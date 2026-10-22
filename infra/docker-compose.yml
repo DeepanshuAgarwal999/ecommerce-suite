@@ -29,6 +29,7 @@ x-service-env: &service-env
   PAYMENT_SERVICE_HOST: payment-service
   NOTIFICATION_SERVICE_HOST: notification-service
   RECOMMENDATION_SERVICE_HOST: recommendation-service
+  SUPPORT_SERVICE_HOST: support-service
   AUTH_SERVICE_TCP_PORT: 4001
   USER_SERVICE_TCP_PORT: 4002
   CATALOG_SERVICE_TCP_PORT: 4003
@@ -38,6 +39,7 @@ x-service-env: &service-env
   PAYMENT_SERVICE_TCP_PORT: 4007
   NOTIFICATION_SERVICE_TCP_PORT: 4008
   RECOMMENDATION_SERVICE_TCP_PORT: 4009
+  SUPPORT_SERVICE_TCP_PORT: 4010
 
 x-service-defaults: &service-defaults
   restart: unless-stopped
@@ -180,6 +182,8 @@ services:
       SERVICE_NAME: api-gateway
       PORT: 3000
       CORS_ORIGINS: "*"
+      # Support assistant; empty = chat falls back to the ticket form.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports:
       - "3000:3000"
     deploy:
@@ -321,6 +325,22 @@ services:
       PORT: 3009
       TCP_PORT: 4009
       DATABASE_URL: postgresql://${POSTGRES_USER:-ecom}:${POSTGRES_PASSWORD:-ecom}@postgres:5432/recommendation_db?schema=public
+
+  # Support conversations, tickets and the agent queue. The assistant's model loop
+  # runs in the gateway (it streams to the client); this service only persists.
+  support-service:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      args: { APP: support-service }
+    image: ecom/support-service
+    environment:
+      <<: *service-env
+      SERVICE_NAME: support-service
+      PORT: 3010
+      TCP_PORT: 4010
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ecom}:${POSTGRES_PASSWORD:-ecom}@postgres:5432/support_db?schema=public
 
 volumes:
   postgres-data:

@@ -2,11 +2,13 @@ import {
   ChartColumnIncreasing,
   GalleryHorizontal,
   LayoutDashboard,
+  LifeBuoy,
   Package,
   Settings,
   ShoppingCart,
   Star,
   Store,
+  Truck,
   Warehouse,
   type LucideIcon,
 } from 'lucide-react';
@@ -27,6 +29,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Inventory', href: '/inventory', icon: Warehouse, matchPrefix: true },
   { label: 'Orders', href: '/orders', icon: ShoppingCart, matchPrefix: true },
   { label: 'Reviews', href: '/reviews', icon: Star },
+  { label: 'Support', href: '/support', icon: LifeBuoy, matchPrefix: true },
   { label: 'Storefront', href: '/storefront', icon: GalleryHorizontal, matchPrefix: true },
+  { label: 'Delivery', href: '/delivery', icon: Truck },
   { label: 'Settings', href: '/settings', icon: Settings },
 ];

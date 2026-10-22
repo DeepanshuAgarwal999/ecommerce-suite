@@ -154,6 +154,34 @@ const DEFAULT_TEMPLATES: TemplateSeed[] = [
     deepLink: 'app://seller/apply',
     required: ['businessName'],
   },
+  // Support - deep links carry the ticket id because the app routes by id.
+  {
+    key: TemplateKeys.SUPPORT_TICKET_CREATED,
+    category: NotificationCategory.TRANSACTIONAL,
+    channels: [NotificationChannel.PUSH, NotificationChannel.IN_APP],
+    title: 'Ticket {{ticketNumber}} raised',
+    body: 'We have your request about "{{subject}}". Our support team will reply here shortly.',
+    deepLink: 'app://support/{{ticketId}}',
+    required: ['ticketNumber', 'ticketId', 'subject'],
+  },
+  {
+    key: TemplateKeys.SUPPORT_AGENT_REPLY,
+    category: NotificationCategory.TRANSACTIONAL,
+    channels: [NotificationChannel.PUSH, NotificationChannel.IN_APP],
+    title: '{{agentName}} replied to your ticket',
+    body: 'New reply on {{ticketNumber}}: "{{subject}}". Tap to read and respond.',
+    deepLink: 'app://support/{{ticketId}}',
+    required: ['ticketNumber', 'ticketId', 'subject', 'agentName'],
+  },
+  {
+    key: TemplateKeys.SUPPORT_TICKET_RESOLVED,
+    category: NotificationCategory.TRANSACTIONAL,
+    channels: [NotificationChannel.PUSH, NotificationChannel.IN_APP],
+    title: 'Ticket {{ticketNumber}} resolved',
+    body: 'We have marked "{{subject}}" as resolved. Reply if anything still is not right.',
+    deepLink: 'app://support/{{ticketId}}',
+    required: ['ticketNumber', 'ticketId', 'subject'],
+  },
 ];
 
 /**

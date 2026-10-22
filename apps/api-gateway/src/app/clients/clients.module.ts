@@ -25,6 +25,7 @@ const SERVICES: { token: string; key: string; defaultPort: number }[] = [
   { token: ServiceTokens.PAYMENT, key: 'payment', defaultPort: 4007 },
   { token: ServiceTokens.NOTIFICATION, key: 'notification', defaultPort: 4008 },
   { token: ServiceTokens.RECOMMENDATION, key: 'recommendation', defaultPort: 4009 },
+  { token: ServiceTokens.SUPPORT, key: 'support', defaultPort: 4010 },
 ];
 
 @Global()

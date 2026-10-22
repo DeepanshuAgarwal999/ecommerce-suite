@@ -206,6 +206,10 @@ export const configuration = () => ({
       host: process.env.RECOMMENDATION_SERVICE_HOST ?? 'localhost',
       port: toInt(process.env.RECOMMENDATION_SERVICE_TCP_PORT, 4009),
     },
+    support: {
+      host: process.env.SUPPORT_SERVICE_HOST ?? 'localhost',
+      port: toInt(process.env.SUPPORT_SERVICE_TCP_PORT, 4010),
+    },
   } satisfies Record<string, TcpServiceEndpoint>,
 
   clients: {
@@ -219,6 +223,22 @@ export const configuration = () => ({
     cookieDomain: process.env.AUTH_COOKIE_DOMAIN || undefined,
     cookieSecure: toBool(process.env.AUTH_COOKIE_SECURE, process.env.NODE_ENV === 'production'),
     cookieSameSite: (process.env.AUTH_COOKIE_SAMESITE ?? 'lax') as 'lax' | 'strict' | 'none',
+  },
+
+  /**
+   * Support assistant (api-gateway). The Anthropic SDK reads ANTHROPIC_API_KEY (or an
+   * `ant auth login` profile) itself; `enabled` only decides whether the chat offers AI
+   * answers or goes straight to the ticket form.
+   */
+  assistant: {
+    enabled: toBool(process.env.SUPPORT_ASSISTANT_ENABLED, true),
+    model: process.env.SUPPORT_ASSISTANT_MODEL ?? 'claude-opus-5-5',
+    /** Chat answers are short and latency-sensitive: low effort keeps them quick. */
+    effort: (process.env.SUPPORT_ASSISTANT_EFFORT ?? 'low') as 'low' | 'medium' | 'high',
+    /** Tool round-trips allowed per customer message before handing off to a ticket. */
+    maxToolIterations: toInt(process.env.SUPPORT_ASSISTANT_MAX_TOOL_ITERATIONS, 8),
+    /** Customer turns per conversation; past this the assistant suggests a ticket. */
+    maxTurns: toInt(process.env.SUPPORT_ASSISTANT_MAX_TURNS, 30),
   },
 
   observability: {

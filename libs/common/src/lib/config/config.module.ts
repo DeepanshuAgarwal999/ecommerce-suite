@@ -15,6 +15,7 @@ const REQUIRED_BY_SERVICE: Record<string, string[]> = {
   'payment-service': ['DATABASE_URL'],
   'notification-service': ['DATABASE_URL'],
   'recommendation-service': ['DATABASE_URL'],
+  'support-service': ['DATABASE_URL'],
 };
 
 /**

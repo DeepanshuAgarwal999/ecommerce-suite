@@ -1,0 +1,159 @@
+# Production overlay for a single server (e.g. an Oracle Cloud Always Free ARM VM).
+# Layered on top of docker-compose.yml, which stays the single definition of every service:
+#
+#   docker compose --env-file infra/.env.prod \
+#     -f infra/docker-compose.yml -f infra/docker-compose.prod.yml --profile app up -d --build
+#
+# (infra/deploy/deploy.sh wraps exactly that.)
+#
+# What changes versus local dev:
+#   - NODE_ENV=production everywhere: secrets >= 32 chars are enforced and the fixed dev
+#     OTP is refused, so both are blanked/required here.
+#   - Nothing publishes a host port except Caddy (80/443). Postgres, Redis and Kafka are
+#     reachable only on the internal network.
+#   - The three Next.js apps and Caddy (automatic HTTPS) join the stack.
+#   - kafka-ui moves to the "tools" profile; start it on demand behind an SSH tunnel.
+
+x-prod-env: &prod-env
+  NODE_ENV: production
+  LOG_LEVEL: info
+  JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in infra/.env.prod}
+  JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in infra/.env.prod}
+  # The base file defaults this to 123456; production config refuses to boot with it set.
+  OTP_DEV_FIXED_CODE: ""
+  SMS_PROVIDER: ${SMS_PROVIDER:-console}
+
+x-frontend: &frontend
+  restart: unless-stopped
+  profiles: ["app"]
+  networks: [backend]
+  depends_on: [api-gateway]
+  deploy:
+    resources:
+      limits:
+        memory: 768M
+
+services:
+  postgres:
+    ports: !reset []
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/.env.prod}
+
+  redis:
+    ports: !reset []
+
+  kafka:
+    ports: !reset []
+
+  kafka-ui:
+    profiles: ["tools"]
+    ports: !reset ["127.0.0.1:8080:8080"]
+
+  api-gateway:
+    ports: !reset []
+    environment:
+      <<: *prod-env
+      # Storefront calls the API on its own origin; partner/admin are same-site subdomains.
+      CORS_ORIGINS: https://${DOMAIN},https://partner.${DOMAIN},https://admin.${DOMAIN}
+      AUTH_COOKIE_SECURE: "true"
+      AUTH_COOKIE_SAMESITE: lax
+      TRUST_PROXY: "true"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+
+  auth-service:
+    environment: *prod-env
+
+  user-service:
+    environment: *prod-env
+
+  catalog-service:
+    environment: *prod-env
+
+  inventory-service:
+    environment: *prod-env
+
+  cart-service:
+    environment: *prod-env
+
+  order-service:
+    environment: *prod-env
+
+  payment-service:
+    environment:
+      <<: *prod-env
+      PAYMENT_PROVIDER: razorpay
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:?set RAZORPAY_KEY_ID in infra/.env.prod (test keys are fine)}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:?set RAZORPAY_KEY_SECRET in infra/.env.prod}
+
+  notification-service:
+    environment: *prod-env
+
+  recommendation-service:
+    environment: *prod-env
+
+  support-service:
+    environment: *prod-env
+
+  # ---------------------------------------------------------------------------
+  # Frontends
+  # ---------------------------------------------------------------------------
+  web:
+    <<: *frontend
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.frontend
+      args:
+        APP: web
+        PORT: 4200
+        NEXT_PUBLIC_API_URL: https://${DOMAIN}/api/v1
+        NEXT_PUBLIC_SITE_URL: https://${DOMAIN}
+    image: ecom/web
+
+  partner:
+    <<: *frontend
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.frontend
+      args:
+        APP: partner
+        PORT: 4201
+        NEXT_PUBLIC_API_URL: https://${DOMAIN}/api/v1
+        NEXT_PUBLIC_SITE_URL: https://partner.${DOMAIN}
+    image: ecom/partner
+
+  admin:
+    <<: *frontend
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.frontend
+      args:
+        APP: admin
+        PORT: 4300
+        NEXT_PUBLIC_API_URL: https://${DOMAIN}/api/v1
+        NEXT_PUBLIC_SITE_URL: https://admin.${DOMAIN}
+    image: ecom/admin
+
+  # ---------------------------------------------------------------------------
+  # Edge
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    profiles: ["app"]
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in infra/.env.prod}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in infra/.env.prod}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [api-gateway, web, partner, admin]
+    networks: [backend]
+
+volumes:
+  caddy-data:
+  caddy-config:

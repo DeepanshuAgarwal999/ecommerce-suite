@@ -1,0 +1,223 @@
+// support-service owns customer support: AI assistant conversations, the tickets
+// they escalate into, and the agent work queue the admin console runs on.
+//
+// Data flow:
+//   customer chat (gateway runs the Claude tool loop, persists every turn here)
+//     -> ticket draft (AI-proposed, customer-confirmed) -> SupportTicket (queued)
+//     -> agent claims / replies / resolves -> NOTIFICATION_REQUESTED (outbox) -> push + inbox
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/@ecom-db/support"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ConversationStatus {
+  ACTIVE
+  /// The customer marked the assistant's answer as helpful.
+  RESOLVED
+  /// A ticket was raised from this conversation.
+  ESCALATED
+  CLOSED
+}
+
+enum ConversationRole {
+  USER
+  ASSISTANT
+}
+
+/// Declaration order is the queue order: `ORDER BY priority DESC` puts URGENT first.
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketStatus {
+  /// In the queue, nobody working on it.
+  OPEN
+  /// Claimed by an agent.
+  IN_PROGRESS
+  /// Agent replied; the ball is with the customer.
+  WAITING_ON_CUSTOMER
+  RESOLVED
+  /// Resolved and closed for good (auto after 7 days, or by an agent).
+  CLOSED
+}
+
+enum TicketCategory {
+  ORDER
+  DELIVERY
+  PAYMENT_REFUND
+  RETURN_EXCHANGE
+  PRODUCT
+  ACCOUNT
+  OTHER
+}
+
+enum MessageAuthor {
+  CUSTOMER
+  AGENT
+  /// Status changes and automated notes shown in the thread.
+  SYSTEM
+}
+
+model SupportConversation {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+
+  /// Client the chat started from (ANDROID, IOS, WEB).
+  channel String             @default("WEB") @db.VarChar(20)
+  status  ConversationStatus @default(ACTIVE)
+  /// First user message, trimmed - the list label.
+  title   String             @default("New conversation") @db.VarChar(160)
+
+  /// The exact Anthropic message history (tool_use / tool_result / thinking blocks
+  /// included). Append-only: earlier turns are never edited, which keeps prompt
+  /// caching and preserved thinking valid across turns.
+  llmHistory Json @default("[]")
+
+  /// AI-proposed ticket waiting for the customer to confirm (or null).
+  ticketDraft Json?
+  ticketId    String? @db.Uuid
+
+  /// Thumbs up/down from the customer on the conversation.
+  helpful Boolean?
+
+  turnCount    Int @default(0)
+  inputTokens  Int @default(0)
+  outputTokens Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages ConversationMessage[]
+
+  @@index([userId, updatedAt])
+  @@map("support_conversations")
+}
+
+/// The display transcript: what the customer and assistant said, in plain text.
+/// The admin sees this when a ticket came out of a chat.
+model ConversationMessage {
+  id             String              @id @default(uuid()) @db.Uuid
+  conversationId String              @db.Uuid
+  conversation   SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  role    ConversationRole
+  content String           @db.Text
+  /// UI extras for the assistant turn: tools used, ticket draft shown, etc.
+  meta    Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+  @@map("support_conversation_messages")
+}
+
+model SupportTicket {
+  id           String @id @default(uuid()) @db.Uuid
+  /// Customer-facing reference, e.g. "SUP-7K3F9Q". Non-sequential on purpose.
+  ticketNumber String @unique @db.VarChar(16)
+
+  userId     String  @db.Uuid
+  userMobile String? @db.VarChar(20)
+
+  conversationId String? @db.Uuid
+
+  category TicketCategory
+  priority TicketPriority @default(MEDIUM)
+  status   TicketStatus   @default(OPEN)
+
+  subject     String  @db.VarChar(200)
+  description String  @db.Text
+  orderNumber String? @db.VarChar(24)
+  orderId     String? @db.Uuid
+  /// Assistant-written brief for the agent: problem, what was tried, what the customer wants.
+  aiSummary   String? @db.Text
+  /// Where the ticket came from: ASSISTANT (chat escalation) or FORM (direct).
+  source      String  @default("ASSISTANT") @db.VarChar(20)
+
+  assigneeId   String? @db.Uuid
+  assigneeName String? @db.VarChar(120)
+
+  /// First-response SLA target, from priority at creation (see ticket.service SLA_HOURS).
+  slaDueAt        DateTime
+  firstResponseAt DateTime?
+  resolvedAt      DateTime?
+  closedAt        DateTime?
+  /// Who spoke last - drives "waiting on us" vs "waiting on customer" in the queue.
+  lastActivityAt  DateTime  @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages TicketMessage[]
+  events   TicketEvent[]
+
+  /// The queue scan: open/unassigned by priority then SLA.
+  @@index([status, assigneeId, priority, slaDueAt])
+  @@index([assigneeId, status])
+  @@index([userId, createdAt])
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id       String        @id @default(uuid()) @db.Uuid
+  ticketId String        @db.Uuid
+  ticket   SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  author     MessageAuthor
+  authorId   String?       @db.Uuid
+  authorName String?       @db.VarChar(120)
+  body       String        @db.Text
+  /// Internal agent note - never shown to the customer.
+  internal   Boolean       @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([ticketId, createdAt])
+  @@map("support_ticket_messages")
+}
+
+/// Audit trail: who assigned, re-prioritised or changed status, and when.
+model TicketEvent {
+  id       String        @id @default(uuid()) @db.Uuid
+  ticketId String        @db.Uuid
+  ticket   SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  type    String  @db.VarChar(40)
+  actorId String? @db.Uuid
+  data    Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([ticketId, createdAt])
+  @@map("support_ticket_events")
+}
+
+model OutboxEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  topic         String   @db.VarChar(120)
+  eventType     String   @db.VarChar(120)
+  eventVersion  Int      @default(1)
+  partitionKey  String   @db.VarChar(120)
+  payload       Json
+  correlationId String?  @db.VarChar(128)
+  causationId   String?  @db.VarChar(128)
+  actorId       String?  @db.VarChar(64)
+  source        String?  @db.VarChar(20)
+
+  publishedAt DateTime?
+  attempts    Int       @default(0)
+  lastError   String?   @db.VarChar(500)
+  createdAt   DateTime  @default(now())
+
+  @@index([publishedAt, createdAt])
+  @@map("outbox_events")
+}

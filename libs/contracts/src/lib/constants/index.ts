@@ -37,6 +37,9 @@ export const CacheKeys = {
   homeBanners: () => `catalog:home:banners`,
   homeSections: () => `catalog:home:sections`,
   footer: () => `catalog:footer`,
+  shippingSettings: () => `catalog:shipping:settings`,
+  /** Category rules + parent links, used to resolve inherited rules without a tree walk per query. */
+  shippingCategoryRules: () => `catalog:shipping:category-rules`,
   activeTheme: () => `catalog:home:theme`,
   searchSuggest: (term: string) => `catalog:suggest:${term}`,
   /** Per-day engagement leaderboards (Redis sorted sets) - `day` is YYYY-MM-DD (IST).
@@ -115,6 +118,7 @@ export const ServiceNames = {
   PAYMENT: 'payment-service',
   NOTIFICATION: 'notification-service',
   RECOMMENDATION: 'recommendation-service',
+  SUPPORT: 'support-service',
 } as const;
 
 /**

@@ -45,6 +45,18 @@ const STATUS_TONE: Record<string, Tone> = {
   PARTIALLY_REFUNDED: 'warning',
   PROCESSED: 'success',
 
+  // support tickets
+  OPEN: 'warning',
+  IN_PROGRESS: 'info',
+  WAITING_ON_CUSTOMER: 'neutral',
+  RESOLVED: 'success',
+  CLOSED: 'neutral',
+  // ticket priorities
+  URGENT: 'destructive',
+  HIGH: 'warning',
+  MEDIUM: 'info',
+  LOW: 'neutral',
+
   // identities
   BLOCKED: 'destructive',
   DELETED: 'neutral',
